@@ -14,45 +14,158 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, X, FileText, Tag, Image, Save, Send } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Upload,
+  X,
+  FileText,
+  Tag,
+  Image,
+  Save,
+  Send,
+  Plus,
+  FolderPlus,
+  Hash,
+  Eye,
+  EyeOff,
+  Globe,
+  Loader2,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  LayoutTemplate,
+  Palette,
+  Clock,
+} from "lucide-react";
+import { toast } from "sonner";
+import Link from "next/link";
 
 export default function NewArticlePage() {
   const { user, token } = useAuth();
   const router = useRouter();
 
   const [title, setTitle] = useState("");
+  const [excerpt, setExcerpt] = useState("");
   const [content, setContent] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [tags, setTags] = useState<number[]>([]);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  const [status, setStatus] = useState<"public" | "draft">("public");
+  const [status, setStatus] = useState<"PUBLISHED" | "DRAFT">("DRAFT");
+  const [featured, setFeatured] = useState(false);
 
   const [categories, setCategories] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [characterCount, setCharacterCount] = useState(0);
+  const [wordCount, setWordCount] = useState(0);
+  const [activeTab, setActiveTab] = useState("content");
+
+  // Dialogs state
+  const [newTagDialog, setNewTagDialog] = useState(false);
+  const [newCategoryDialog, setNewCategoryDialog] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingTag, setCreatingTag] = useState(false);
+  const [creatingCategory, setCreatingCategory] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`)
-      .then((res) => res.json())
-      .then((data) => setCategories(data.data || data));
-
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/tags`)
-      .then((res) => res.json())
-      .then((data) => setAllTags(data.data || data));
+    fetchCategories();
+    fetchTags();
   }, []);
 
-  if (!user || user.role === "READER") return null;
+  useEffect(() => {
+    setCharacterCount(content.length);
+    setWordCount(
+      content
+        .trim()
+        .split(/\s+/)
+        .filter((word) => word.length > 0).length,
+    );
+  }, [content]);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`);
+      const data = await res.json();
+      const categoryList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.categories)
+            ? data.categories
+            : [];
+      setCategories(categoryList);
+    } catch (error) {
+      toast.error("Failed to load categories");
+    }
+  };
+
+  const fetchTags = async () => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tags`);
+      const data = await res.json();
+      const tagList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.tags)
+            ? data.tags
+            : [];
+      setAllTags(tagList);
+    } catch (error) {
+      toast.error("Failed to load tags");
+    }
+  };
+
+  if (!user || user.role === "READER") {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 mx-auto text-red-500 mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+          <p className="text-muted-foreground mb-4">
+            You don't have permission to create articles
+          </p>
+          <Button asChild>
+            <Link href="/">Go Home</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const toggleTag = (id: number) => {
     setTags((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
     );
   };
 
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("Image size should be less than 10MB");
+        return;
+      }
       setThumbnail(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -67,255 +180,716 @@ export default function NewArticlePage() {
     setThumbnailPreview(null);
   };
 
-  const handleSubmit = async (status: "public" | "draft") => {
-    setLoading(true);
-
-    const formData = new FormData();
-    formData.append("title", title);
-    formData.append("content", content);
-    formData.append("category_id", categoryId);
-    formData.append("status", status === "public" ? "PUBLISHED" : "DRAFT");
-    if (thumbnail) formData.append("thumbnail", thumbnail);
-    tags.forEach((id) => formData.append("tag_ids[]", id.toString()));
-
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-
-    if (res.ok) {
-      router.push("/dashboard");
-    } else {
-      alert("Create article failed");
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) {
+      toast.error("Tag name is required");
+      return;
     }
 
-    setLoading(false);
+    setCreatingTag(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tags`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newTagName.trim() }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAllTags((prev) => [...prev, data]);
+        setTags((prev) => [...prev, data.id]);
+        setNewTagName("");
+        setNewTagDialog(false);
+        toast.success(`Tag "${newTagName}" created successfully`);
+      } else {
+        const error = await res.json();
+        toast.error(error.message || "Failed to create tag");
+      }
+    } catch (error) {
+      toast.error("Network error occurred");
+    } finally {
+      setCreatingTag(false);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error("Category name is required");
+      return;
+    }
+
+    setCreatingCategory(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newCategoryName.trim() }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCategories((prev) => [...prev, data]);
+        setCategoryId(data.id.toString());
+        setNewCategoryName("");
+        setNewCategoryDialog(false);
+        toast.success(`Category "${newCategoryName}" created successfully`);
+      } else {
+        const error = await res.json();
+        toast.error(error.message || "Failed to create category");
+      }
+    } catch (error) {
+      toast.error("Network error occurred");
+    } finally {
+      setCreatingCategory(false);
+    }
+  };
+
+  const handleSubmit = async (publishStatus: "PUBLISHED" | "DRAFT") => {
+    if (!title.trim() || !content.trim() || !categoryId) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("title", title.trim());
+      formData.append("excerpt", excerpt.trim());
+      formData.append("content", content.trim());
+      formData.append("category_id", categoryId);
+      formData.append("status", publishStatus);
+      formData.append("featured", featured.toString());
+      if (thumbnail) formData.append("thumbnail", thumbnail);
+      tags.forEach((id) => formData.append("tag_ids[]", id.toString()));
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(
+          publishStatus === "PUBLISHED"
+            ? "Article published successfully!"
+            : "Article saved as draft!",
+        );
+        router.push("/dashboard");
+      } else {
+        const error = await res.json();
+        toast.error(error.message || "Failed to create article");
+      }
+    } catch (error) {
+      toast.error("Network error occurred");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
       <Navbar />
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12">
-        <div className="container mx-auto max-w-4xl px-4">
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900">
+        <div className="container mx-auto px-4 py-8">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">
-              Create New Article
-            </h1>
-            <p className="text-slate-600">Share your thoughts with the world</p>
-          </div>
-
-          {/* Form Card */}
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-            <div className="p-8 space-y-8">
-              {/* Title Section */}
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <FileText className="w-4 h-4" />
-                  Article Title
-                </label>
-                <Input
-                  placeholder="Enter an engaging title..."
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="text-lg h-12 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              {/* Category Section */}
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">
-                  Category
-                </label>
-                <Select onValueChange={setCategoryId} required>
-                  <SelectTrigger className="h-12 border-slate-300 focus:border-blue-500 focus:ring-blue-500">
-                    <SelectValue placeholder="Choose a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id.toString()}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Content Section */}
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">
-                  Content
-                </label>
-                <Textarea
-                  placeholder="Write your article content here..."
-                  className="min-h-[300px] border-slate-300 focus:border-blue-500 focus:ring-blue-500 text-base leading-relaxed"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  required
-                />
-                <p className="text-xs text-slate-500">
-                  {content.length} characters
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
+                  Create New Article
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400 mt-2">
+                  Share your knowledge and insights with the world
                 </p>
               </div>
 
-              {/* Thumbnail Section */}
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <Image className="w-4 h-4" />
-                  Thumbnail Image
-                </label>
-
-                {thumbnailPreview ? (
-                  <div className="relative inline-block">
-                    <img
-                      src={thumbnailPreview}
-                      alt="Thumbnail preview"
-                      className="w-full max-w-md h-48 object-cover rounded-lg border-2 border-slate-200"
-                    />
-                    <button
-                      type="button"
-                      onClick={removeThumbnail}
-                      className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors shadow-lg"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-10 h-10 text-slate-400 mb-3" />
-                      <p className="text-sm text-slate-600 font-medium">
-                        Click to upload thumbnail
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        PNG, JPG, GIF up to 10MB
-                      </p>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleThumbnailChange}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-              </div>
-
-              {/* Tags Section */}
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <Tag className="w-4 h-4" />
-                  Tags ({tags.length} selected)
-                </label>
-                <div className="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                  {allTags.length > 0 ? (
-                    allTags.map((tag) => (
-                      <button
-                        type="button"
-                        key={tag.id}
-                        onClick={() => toggleTag(tag.id)}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                          tags.includes(tag.id)
-                            ? "bg-blue-500 text-white shadow-md scale-105"
-                            : "bg-white text-slate-700 border border-slate-300 hover:border-blue-400 hover:bg-blue-50"
-                        }`}
-                      >
-                        {tag.name}
-                      </button>
-                    ))
-                  ) : (
-                    <p className="text-slate-500 text-sm">No tags available</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Submit Section */}
-              <div className="flex gap-4 pt-4 border-t border-slate-200">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push("/dashboard")}
-                  className="flex-1 h-12 text-base"
-                  disabled={loading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => handleSubmit("draft")}
-                  disabled={loading}
-                  variant="outline"
-                  className="flex-1 h-12 text-base border-slate-300 hover:bg-slate-50"
-                >
-                  {loading ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          fill="none"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      Saving...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Save className="w-4 h-4" />
-                      Save as Draft
-                    </span>
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => handleSubmit("public")}
-                  disabled={loading}
-                  className="flex-1 h-12 text-base bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg"
-                >
-                  {loading ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          fill="none"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      Publishing...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Send className="w-4 h-4" />
-                      Publish Now
-                    </span>
-                  )}
-                </Button>
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className="gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {user.role === "ADMIN" ? "Administrator" : "Author"}
+                </Badge>
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left Column - Main Form */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Content Card */}
+              <Card className="border-gray-200 dark:border-gray-800 shadow-lg">
+                <CardHeader className="border-b bg-gradient-to-r from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-900/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <CardTitle>Content</CardTitle>
+                        <CardDescription>
+                          Write your main article content
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Tabs value={activeTab} onValueChange={setActiveTab}>
+                      <TabsList>
+                        <TabsTrigger value="content">Content</TabsTrigger>
+                        <TabsTrigger value="preview">Preview</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="pt-6">
+                  <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <TabsContent value="content" className="space-y-6">
+                      {/* Title */}
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Title <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          placeholder="Catchy title that grabs attention..."
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          className="h-12 text-lg border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:ring-blue-500/20"
+                          required
+                        />
+                      </div>
+
+                      {/* Excerpt */}
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Excerpt (Optional)
+                        </Label>
+                        <Textarea
+                          placeholder="Brief summary of your article..."
+                          value={excerpt}
+                          onChange={(e) => setExcerpt(e.target.value)}
+                          className="min-h-[100px] border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:ring-blue-500/20"
+                          maxLength={200}
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {excerpt.length}/200 characters
+                        </p>
+                      </div>
+
+                      {/* Content */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Content <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                            <span>{wordCount} words</span>
+                            <span>{characterCount} characters</span>
+                          </div>
+                        </div>
+                        <Textarea
+                          placeholder="Start writing your amazing content here..."
+                          className="min-h-[400px] font-mono text-sm leading-relaxed border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:ring-blue-500/20"
+                          value={content}
+                          onChange={(e) => setContent(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="preview">
+                      <div className="prose prose-lg dark:prose-invert max-w-none p-4 border rounded-lg bg-gray-50 dark:bg-gray-900 min-h-[400px]">
+                        {content ? (
+                          <div>
+                            <h1 className="text-3xl font-bold mb-4">{title}</h1>
+                            {excerpt && (
+                              <div className="text-gray-600 dark:text-gray-400 italic mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                {excerpt}
+                              </div>
+                            )}
+                            <div className="whitespace-pre-wrap">{content}</div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-64 text-gray-400 dark:text-gray-500">
+                            <p>No content to preview</p>
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+
+              {/* Thumbnail Card */}
+              <Card className="border-gray-200 dark:border-gray-800 shadow-lg">
+                <CardHeader className="border-b bg-gradient-to-r from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-900/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+                      <Image className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <CardTitle>Thumbnail</CardTitle>
+                      <CardDescription>
+                        Upload a featured image for your article
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    {thumbnailPreview ? (
+                      <div className="space-y-4">
+                        <div className="relative rounded-xl overflow-hidden border-2 border-gray-200 dark:border-gray-700">
+                          <img
+                            src={thumbnailPreview}
+                            alt="Thumbnail preview"
+                            className="w-full h-64 object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="destructive"
+                            onClick={removeThumbnail}
+                            className="absolute top-4 right-4"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Click image to change
+                        </p>
+                      </div>
+                    ) : (
+                      <label className="block">
+                        <div className="flex flex-col items-center justify-center w-full h-64 border-3 border-dashed border-gray-300 dark:border-gray-700 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/20 dark:hover:bg-blue-900/10 transition-all duration-200 group">
+                          <div className="flex flex-col items-center justify-center p-8">
+                            <div className="p-4 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-4 group-hover:scale-110 transition-transform">
+                              <Upload className="h-8 w-8" />
+                            </div>
+                            <p className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Upload Thumbnail
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                              Drag & drop or click to browse
+                              <br />
+                              Recommended: 1200×630px, max 10MB
+                            </p>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleThumbnailChange}
+                            className="hidden"
+                          />
+                        </div>
+                      </label>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right Column - Settings */}
+            <div className="space-y-6">
+              {/* Publish Card */}
+              <Card className="border-gray-200 dark:border-gray-800 shadow-lg sticky top-8">
+                <CardHeader className="border-b bg-gradient-to-r from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-900/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                      <Send className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <CardTitle>Publish Settings</CardTitle>
+                      <CardDescription>
+                        Configure your article settings
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  {/* Status */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Status
+                    </Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        type="button"
+                        variant={status === "DRAFT" ? "default" : "outline"}
+                        onClick={() => setStatus("DRAFT")}
+                        className="h-11 justify-start gap-3"
+                      >
+                        <EyeOff className="h-4 w-4" />
+                        Draft
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={status === "PUBLISHED" ? "default" : "outline"}
+                        onClick={() => setStatus("PUBLISHED")}
+                        className="h-11 justify-start gap-3"
+                      >
+                        <Globe className="h-4 w-4" />
+                        Published
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Category */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Category <span className="text-red-500">*</span>
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setNewCategoryDialog(true)}
+                        className="h-7 text-xs gap-1"
+                      >
+                        <Plus className="h-3 w-3" />
+                        New
+                      </Button>
+                    </div>
+                    <Select
+                      value={categoryId}
+                      onValueChange={setCategoryId}
+                      required
+                    >
+                      <SelectTrigger className="h-11 border-gray-300 dark:border-gray-700">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id.toString()}>
+                            <div className="flex items-center gap-2">
+                              <FolderPlus className="h-4 w-4 text-gray-500" />
+                              {c.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Tags */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Tags ({tags.length} selected)
+                      </Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setTags([])}
+                          className="h-7 text-xs"
+                        >
+                          Clear all
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setNewTagDialog(true)}
+                          className="h-7 text-xs gap-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                          New
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 max-h-48 overflow-y-auto">
+                      {allTags.length > 0 ? (
+                        allTags.map((tag) => (
+                          <Badge
+                            key={tag.id}
+                            variant={
+                              tags.includes(tag.id) ? "default" : "outline"
+                            }
+                            className="cursor-pointer transition-all hover:scale-105 gap-1.5"
+                            onClick={() => toggleTag(tag.id)}
+                          >
+                            <Hash className="h-3 w-3" />
+                            {tag.name}
+                            {tags.includes(tag.id) && (
+                              <CheckCircle2 className="h-3 w-3" />
+                            )}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">
+                          No tags available
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Featured */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400">
+                        <Star className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Featured Article
+                        </Label>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Highlight this article
+                        </p>
+                      </div>
+                    </div>
+                    <Switch checked={featured} onCheckedChange={setFeatured} />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="space-y-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      onClick={() => handleSubmit(status)}
+                      disabled={
+                        loading ||
+                        !title.trim() ||
+                        !content.trim() ||
+                        !categoryId
+                      }
+                      className="w-full h-12 text-base font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/20"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          {status === "PUBLISHED"
+                            ? "Publishing..."
+                            : "Saving..."}
+                        </>
+                      ) : status === "PUBLISHED" ? (
+                        <>
+                          <Send className="h-5 w-5 mr-2" />
+                          Publish Now
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-5 w-5 mr-2" />
+                          Save as Draft
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => router.push("/dashboard")}
+                      disabled={loading}
+                      className="w-full h-11"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="pt-4 border-t">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                        <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          {wordCount}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Words
+                        </div>
+                      </div>
+                      <div className="text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                        <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          {characterCount}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Characters
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tips Card */}
+              <Card className="border-gray-200 dark:border-gray-800 shadow-lg bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-900">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-400">
+                    <Sparkles className="h-5 w-5" />
+                    Writing Tips
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    {
+                      icon: <FileText className="h-4 w-4" />,
+                      title: "Catchy Title",
+                      desc: "Make your title specific and intriguing",
+                    },
+                    {
+                      icon: <LayoutTemplate className="h-4 w-4" />,
+                      title: "Clear Structure",
+                      desc: "Use headings and paragraphs",
+                    },
+                    {
+                      icon: <Palette className="h-4 w-4" />,
+                      title: "Engaging Content",
+                      desc: "Add images and examples",
+                    },
+                    {
+                      icon: <Clock className="h-4 w-4" />,
+                      title: "Optimal Length",
+                      desc: "Aim for 1000-2000 words",
+                    },
+                  ].map((tip, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start gap-3 p-3 bg-white/50 dark:bg-gray-800/30 rounded-lg"
+                    >
+                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                        {tip.icon}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {tip.title}
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          {tip.desc}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
+
+      {/* Create Tag Dialog */}
+      <Dialog open={newTagDialog} onOpenChange={setNewTagDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-5 w-5" />
+              Create New Tag
+            </DialogTitle>
+            <DialogDescription>
+              Add a new tag to categorize your content
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="tag-name">Tag Name</Label>
+              <Input
+                id="tag-name"
+                placeholder="Enter tag name (e.g., Technology)"
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                disabled={creatingTag}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setNewTagDialog(false);
+                setNewTagName("");
+              }}
+              disabled={creatingTag}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateTag}
+              disabled={creatingTag || !newTagName.trim()}
+            >
+              {creatingTag && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create Tag
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Category Dialog */}
+      <Dialog open={newCategoryDialog} onOpenChange={setNewCategoryDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderPlus className="h-5 w-5" />
+              Create New Category
+            </DialogTitle>
+            <DialogDescription>
+              Add a new category to organize your content
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="category-name">Category Name</Label>
+              <Input
+                id="category-name"
+                placeholder="Enter category name (e.g., Sports)"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                disabled={creatingCategory}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateCategory()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setNewCategoryDialog(false);
+                setNewCategoryName("");
+              }}
+              disabled={creatingCategory}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateCategory}
+              disabled={creatingCategory || !newCategoryName.trim()}
+            >
+              {creatingCategory && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Create Category
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
+  );
+}
+
+// Star icon component
+function Star(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
   );
 }

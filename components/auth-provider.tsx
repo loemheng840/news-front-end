@@ -42,6 +42,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  // ✅ ADD THIS
+  const signup = async (name: string, email: string, password: string) => {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        password_confirmation: password,
+      }),
+    });
+
+    if (!res.ok) return false;
+
+    const json = await res.json();
+
+    // If later you return token on register, you can store it too
+    // setUser(json.user);
+    // setToken(json.token);
+
+    return true;
+  };
+
   const logout = async () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -50,7 +74,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider
+      value={{ user, token, login, signup, logout, isLoading }}
+    >
       {children}
     </AuthContext.Provider>
   );

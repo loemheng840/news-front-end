@@ -26,10 +26,10 @@ export const apiClient = {
 
   async searchArticles(
     query: string,
-    page = 1
+    page = 1,
   ): Promise<PaginatedResponse<any>> {
     const res = await fetch(
-      `/api/proxy/articles/search?q=${encodeURIComponent(query)}&page=${page}`
+      `/api/proxy/articles/search?q=${encodeURIComponent(query)}&page=${page}`,
     );
     if (!res.ok) throw new Error(`Search failed`);
     return res.json();
@@ -38,10 +38,10 @@ export const apiClient = {
   async getArticlesByDate(
     from: string,
     to: string,
-    page = 1
+    page = 1,
   ): Promise<PaginatedResponse<any>> {
     const res = await fetch(
-      `/api/proxy/articles/date?from=${from}&to=${to}&page=${page}`
+      `/api/proxy/articles/date?from=${from}&to=${to}&page=${page}`,
     );
     if (!res.ok) throw new Error(`Failed to fetch articles by date`);
     return res.json();
@@ -88,19 +88,6 @@ export const apiClient = {
     }
   },
 };
-export async function fetchBookmarks(token: string) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/bookmarks`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-
-  if (!res.ok) throw new Error("Failed to load bookmarks");
-
-  return await res.json();
-}
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 export async function fetchUsers(token: string) {
@@ -151,4 +138,20 @@ export async function deleteArticle(id: number, token: string) {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
+}
+
+export async function fetchBookmarks(token: string) {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/me/bookmarks`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch bookmarks");
+
+  const data = await res.json();
+
+  // Extract article objects
+  return data.map((item: any) => item.article);
 }

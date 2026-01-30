@@ -1,77 +1,86 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
 
 interface SearchBoxProps {
-  value?: string;
-  onChange?: (value: string) => void;
   placeholder?: string;
   className?: string;
-  onSearch?: (query: string) => void;
 }
 
 export function SearchBox({
-  value,
-  onChange,
   placeholder = "Search articles...",
   className,
-  onSearch,
 }: SearchBoxProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const [query, setQuery] = useState(value ?? searchParams.get("q") ?? "");
-
-  useEffect(() => {
-    if (value !== undefined) setQuery(value);
-  }, [value]);
+  const [query, setQuery] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
-    onSearch?.(query);
-    router.push(`/search?q=${encodeURIComponent(query)}`);
-  };
-
-  const handleChange = (val: string) => {
-    setQuery(val);
-    onChange?.(val);
+    router.push("/search?q");
   };
 
   const handleClear = () => {
     setQuery("");
-    onChange?.("");
-    onSearch?.("");
   };
 
   return (
     <form
       onSubmit={handleSubmit}
-      className={`relative w-full ${className || ""}`}
+      className={`relative w-full max-w-2xl mx-auto ${className ?? ""}`}
     >
-      <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+      <div className="relative flex items-center group">
+        {/* Search Icon */}
+        <Search className="absolute left-4 h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
 
-      <Input
-        type="text"
-        placeholder={placeholder}
-        value={query}
-        onChange={(e) => handleChange(e.target.value)}
-        className="pl-10 pr-10"
-      />
+        {/* Input */}
+        <Input
+          type="text"
+          placeholder={placeholder}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="
+            pl-12 pr-36 h-14 text-base rounded-full border-2
+            shadow-lg hover:shadow-xl transition-all duration-300
+            group-hover:border-primary/50
+          "
+        />
 
-      {query && (
+        {/* Clear Button */}
+        {query && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="
+              absolute right-24
+              p-1 rounded-full
+              text-muted-foreground
+              hover:text-foreground hover:bg-muted
+              transition
+            "
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* Search Button */}
         <button
-          type="button"
-          onClick={handleClear}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          type="submit"
+          className="
+            absolute right-2
+            h-10 px-6 rounded-full
+            bg-primary text-primary-foreground
+            text-sm font-semibold
+            hover:bg-primary/90
+            transition shadow
+          "
         >
-          <X className="h-4 w-4" />
+          Search
         </button>
-      )}
+      </div>
     </form>
   );
 }

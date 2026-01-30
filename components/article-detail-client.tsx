@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import {
   Heart,
@@ -8,7 +10,12 @@ import {
   Trash2,
   Edit2,
   MoreVertical,
+  Send,
+  X,
+  Loader2,
+  Share2,
 } from "lucide-react";
+import SocialShare from "./social-share";
 
 // Type definitions
 type UserRole = "ADMIN" | "AUTHOR" | "READER";
@@ -64,7 +71,15 @@ interface Comment {
   created_at: string;
   updated_at: string;
   user?: User;
-  replies?: Comment[];
+  replies?: CommentWithEngagement[];
+  likes_count?: number;
+  is_liked?: boolean;
+}
+
+interface CommentWithEngagement extends Comment {
+  likes_count: number;
+  is_liked: boolean;
+  user: User;
 }
 
 // Simple Button component
@@ -84,8 +99,10 @@ const Button = ({
     variant === "outline"
       ? "border border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
       : variant === "ghost"
-      ? "bg-transparent hover:bg-gray-100 text-gray-700"
-      : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed";
+        ? "bg-transparent hover:bg-gray-100 text-gray-700"
+        : variant === "danger"
+          ? "bg-red-600 hover:bg-red-700 text-white"
+          : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed";
 
   return (
     <button
@@ -103,66 +120,50 @@ const Button = ({
 const Textarea = ({ className = "", ...props }: any) => {
   return (
     <textarea
-      className={`w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${className}`}
+      className={`w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${className}`}
       {...props}
     />
   );
 };
 
-// Simple Dropdown Menu components
-const DropdownMenu = ({ children }: any) => {
-  return <div className="relative inline-block">{children}</div>;
-};
-
-const DropdownMenuTrigger = ({ children, asChild }: any) => {
-  return <div>{children}</div>;
-};
-
-const DropdownMenuContent = ({ children, align = "start" }: any) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <>
-      <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer">
-        {children}
-      </div>
-      {isOpen && (
-        <div
-          className={`absolute ${
-            align === "end" ? "right-0" : "left-0"
-          } mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10`}
-        >
-          {children}
-        </div>
-      )}
-    </>
-  );
-};
-
-const DropdownMenuItem = ({ children, onClick, className = "" }: any) => {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
-
-interface CommentWithEngagement extends Comment {
-  likes_count: number;
-  is_liked: boolean;
-  user?: User;
-}
-
 export default function ArticleDetailClient({ article }: { article: Article }) {
-  // Mock auth - replace with your actual auth logic
+  // Auth state
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
+  // Article engagement state
+  const [likes, setLikes] = useState(article.likes?.length || 0);
+  const [liked, setLiked] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
+  const [isBookmarking, setIsBookmarking] = useState(false);
+
+  // Comments state
+  const [comments, setComments] = useState<CommentWithEngagement[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isPostingComment, setIsPostingComment] = useState(false);
+
+  // Reply state
+  const [showReplyInput, setShowReplyInput] = useState<number | null>(null);
+  const [replyTexts, setReplyTexts] = useState<{ [key: number]: string }>({});
+  const [isPostingReply, setIsPostingReply] = useState<number | null>(null);
+
+  // Edit state
+  const [editingComment, setEditingComment] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Delete state
+  const [isDeleting, setIsDeleting] = useState<number | null>(null);
+
+  // Dropdown state
+  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+
+  const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+
+  // Initialize auth
   useEffect(() => {
-    // Get user and token from localStorage or your auth system
     const storedUser = localStorage.getItem("user");
     const storedToken = localStorage.getItem("token");
 
@@ -170,23 +171,11 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     if (storedToken) setToken(storedToken);
   }, []);
 
-  const [likes, setLikes] = useState(article.likes?.length || 0);
-  const [liked, setLiked] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
-  const [comments, setComments] = useState<CommentWithEngagement[]>([]);
-  const [commentText, setCommentText] = useState("");
-  const [replyTo, setReplyTo] = useState<number | null>(null);
-  const [editingComment, setEditingComment] = useState<number | null>(null);
-  const [editText, setEditText] = useState("");
-  const [showReplyInput, setShowReplyInput] = useState<number | null>(null);
-  const [replyTexts, setReplyTexts] = useState<{ [key: number]: string }>({});
-  const [isLoadingComments, setIsLoadingComments] = useState(false);
-  const [isPostingComment, setIsPostingComment] = useState(false);
-
-  const API = process.env.NEXT_PUBLIC_API_URL;
-
+  // Load comments and track view
   useEffect(() => {
     loadComments();
+    checkUserLikeStatus();
+    checkUserBookmarkStatus();
 
     // Track view
     if (token) {
@@ -195,13 +184,156 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         headers: { Authorization: `Bearer ${token}` },
       }).catch((error) => console.error("Error tracking view:", error));
     }
-  }, [article.id]);
+  }, [article.id, token]);
+
+  const checkUserLikeStatus = async () => {
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API}/articles/${article.id}/likes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const userLike = data.find((like: any) => like.user_id === user?.id);
+        setLiked(!!userLike);
+      }
+    } catch (error) {
+      console.error("Error checking like status:", error);
+    }
+  };
+
+  const checkUserBookmarkStatus = async () => {
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API}/user/bookmarks`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const isBookmarked = data.some(
+          (bookmark: any) => bookmark.article_id === article.id,
+        );
+        setBookmarked(isBookmarked);
+      }
+    } catch (error) {
+      console.error("Error checking bookmark status:", error);
+    }
+  };
+
+  // Article like functionality
+  const toggleArticleLike = async () => {
+    if (!user) {
+      alert("Please login to like articles");
+      return;
+    }
+
+    if (isLiking) return;
+
+    setIsLiking(true);
+    const previousLiked = liked;
+    const previousLikes = likes;
+
+    try {
+      // Optimistic update
+      if (previousLiked) {
+        setLikes((prev) => prev - 1);
+      } else {
+        setLikes((prev) => prev + 1);
+      }
+      setLiked(!previousLiked);
+
+      const method = previousLiked ? "DELETE" : "POST";
+      const res = await fetch(`${API}/articles/${article.id}/like`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to toggle like");
+      }
+    } catch (error: any) {
+      console.error("Error toggling article like:", error);
+      alert(error.message || "Failed to update like. Please try again.");
+
+      // Revert optimistic update on error
+      setLiked(previousLiked);
+      setLikes(previousLikes);
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  // Article bookmark functionality
+  const toggleBookmark = async () => {
+    if (!user) {
+      alert("Please login to bookmark articles");
+      return;
+    }
+
+    if (isBookmarking) return;
+
+    setIsBookmarking(true);
+    const previousBookmarked = bookmarked;
+
+    try {
+      // Optimistic update
+      setBookmarked(!previousBookmarked);
+
+      const method = previousBookmarked ? "DELETE" : "POST";
+      const res = await fetch(`${API}/articles/${article.id}/bookmark`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to toggle bookmark");
+      }
+    } catch (error: any) {
+      console.error("Error toggling bookmark:", error);
+      alert(error.message || "Failed to update bookmark. Please try again.");
+
+      // Revert on error
+      setBookmarked(previousBookmarked);
+    } finally {
+      setIsBookmarking(false);
+    }
+  };
+
+  // Share article functionality
+  const shareArticle = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert("Article link copied to clipboard!");
+    } catch (error) {
+      console.error("Error copying to clipboard:", error);
+      alert("Failed to copy link. Please try again.");
+    }
+  };
 
   const loadComments = async () => {
     try {
       setIsLoadingComments(true);
-      const res = await fetch(`${API}/articles/${article.id}/comments`);
+      const headers: any = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(`${API}/articles/${article.id}/comments`, {
+        headers,
+      });
+
       if (!res.ok) throw new Error("Failed to load comments");
+
       const data = await res.json();
       setComments(organizeComments(data));
     } catch (error) {
@@ -225,7 +357,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         is_liked: comment.is_liked || false,
         user: comment.user || {
           id: comment.user_id,
-          name: "Anonymous",
+          name: article.author?.name,
           email: "",
           role: "READER",
           created_at: "",
@@ -239,56 +371,14 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       if (comment.parent_id === null || comment.parent_id === undefined) {
         rootComments.push(commentMap[comment.id]);
       } else if (commentMap[comment.parent_id]) {
+        if (!commentMap[comment.parent_id].replies) {
+          commentMap[comment.parent_id].replies = [];
+        }
         commentMap[comment.parent_id].replies!.push(commentMap[comment.id]);
       }
     });
 
     return rootComments;
-  };
-
-  const toggleLike = async () => {
-    if (!user) {
-      alert("Please login to like this article");
-      return;
-    }
-
-    try {
-      const method = liked ? "DELETE" : "POST";
-      const res = await fetch(`${API}/articles/${article.id}/like`, {
-        method,
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) throw new Error("Failed to toggle like");
-
-      setLiked(!liked);
-      setLikes((prev: number) => (liked ? prev - 1 : prev + 1));
-    } catch (error) {
-      console.error("Error toggling like:", error);
-      alert("Failed to update like. Please try again.");
-    }
-  };
-
-  const toggleBookmark = async () => {
-    if (!user) {
-      alert("Please login to bookmark this article");
-      return;
-    }
-
-    try {
-      const method = bookmarked ? "DELETE" : "POST";
-      const res = await fetch(`${API}/articles/${article.id}/bookmark`, {
-        method,
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) throw new Error("Failed to toggle bookmark");
-
-      setBookmarked(!bookmarked);
-    } catch (error) {
-      console.error("Error toggling bookmark:", error);
-      alert("Failed to update bookmark. Please try again.");
-    }
   };
 
   const postComment = async () => {
@@ -309,19 +399,20 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         },
         body: JSON.stringify({
           article_id: article.id,
-          parent_id: replyTo,
           content: commentText,
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to post comment");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to post comment");
+      }
 
       setCommentText("");
-      setReplyTo(null);
-      await loadComments();
-    } catch (error) {
+      await loadComments(); // Refresh comments
+    } catch (error: any) {
       console.error("Error posting comment:", error);
-      alert("Failed to post comment. Please try again.");
+      alert(error.message || "Failed to post comment. Please try again.");
     } finally {
       setIsPostingComment(false);
     }
@@ -337,6 +428,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     if (!replyText?.trim()) return;
 
     try {
+      setIsPostingReply(parentId);
       const res = await fetch(`${API}/comments`, {
         method: "POST",
         headers: {
@@ -350,15 +442,100 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to post reply");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to post reply");
+      }
 
       setReplyTexts({ ...replyTexts, [parentId]: "" });
       setShowReplyInput(null);
-      await loadComments();
-    } catch (error) {
+      await loadComments(); // Refresh comments
+    } catch (error: any) {
       console.error("Error posting reply:", error);
-      alert("Failed to post reply. Please try again.");
+      alert(error.message || "Failed to post reply. Please try again.");
+    } finally {
+      setIsPostingReply(null);
     }
+  };
+
+  const updateComment = async (commentId: number) => {
+    if (!user || !editText.trim()) return;
+
+    try {
+      setIsUpdating(true);
+      const res = await fetch(`${API}/comments/${commentId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: editText }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to update comment");
+      }
+
+      setEditingComment(null);
+      setEditText("");
+      await loadComments(); // Refresh comments
+    } catch (error: any) {
+      console.error("Error updating comment:", error);
+      alert(error.message || "Failed to update comment. Please try again.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const deleteComment = async (commentId: number) => {
+    if (!user) return;
+
+    if (!confirm("Are you sure you want to delete this comment?")) return;
+
+    try {
+      setIsDeleting(commentId);
+      const res = await fetch(`${API}/comments/${commentId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to delete comment");
+      }
+
+      setOpenDropdown(null);
+
+      // Optimistically remove comment from UI
+      setComments((prev) => removeCommentFromTree(prev, commentId));
+    } catch (error: any) {
+      console.error("Error deleting comment:", error);
+      alert(error.message || "Failed to delete comment. Please try again.");
+
+      // If error, refresh comments to get correct state
+      await loadComments();
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  // Helper function to remove comment from tree
+  const removeCommentFromTree = (
+    comments: CommentWithEngagement[],
+    commentId: number,
+  ): CommentWithEngagement[] => {
+    return comments.filter((comment) => {
+      if (comment.id === commentId) {
+        return false;
+      }
+
+      if (comment.replies && comment.replies.length > 0) {
+        comment.replies = removeCommentFromTree(comment.replies, commentId);
+      }
+
+      return true;
+    });
   };
 
   const toggleCommentLike = async (commentId: number, isLiked: boolean) => {
@@ -374,62 +551,78 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) throw new Error("Failed to toggle comment like");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to toggle comment like");
+      }
 
-      await loadComments();
-    } catch (error) {
+      // Optimistically update UI
+      setComments((prev) => updateCommentLike(prev, commentId, !isLiked));
+    } catch (error: any) {
       console.error("Error toggling comment like:", error);
-      alert("Failed to update like. Please try again.");
+      alert(error.message || "Failed to update like. Please try again.");
     }
   };
 
-  const deleteComment = async (commentId: number) => {
-    if (!user) return;
+  // Helper function to update comment like status
+  const updateCommentLike = (
+    comments: CommentWithEngagement[],
+    commentId: number,
+    isLiked: boolean,
+  ): CommentWithEngagement[] => {
+    return comments.map((comment) => {
+      if (comment.id === commentId) {
+        return {
+          ...comment,
+          is_liked: isLiked,
+          likes_count: isLiked
+            ? comment.likes_count + 1
+            : comment.likes_count - 1,
+        };
+      }
 
-    if (!confirm("Are you sure you want to delete this comment?")) return;
+      if (comment.replies && comment.replies.length > 0) {
+        return {
+          ...comment,
+          replies: updateCommentLike(comment.replies, commentId, isLiked),
+        };
+      }
 
-    try {
-      const res = await fetch(`${API}/comments/${commentId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) throw new Error("Failed to delete comment");
-
-      await loadComments();
-    } catch (error) {
-      console.error("Error deleting comment:", error);
-      alert("Failed to delete comment. Please try again.");
-    }
-  };
-
-  const updateComment = async (commentId: number) => {
-    if (!user || !editText.trim()) return;
-
-    try {
-      const res = await fetch(`${API}/comments/${commentId}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content: editText }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update comment");
-
-      setEditingComment(null);
-      setEditText("");
-      await loadComments();
-    } catch (error) {
-      console.error("Error updating comment:", error);
-      alert("Failed to update comment. Please try again.");
-    }
+      return comment;
+    });
   };
 
   const startEdit = (comment: Comment) => {
     setEditingComment(comment.id);
     setEditText(comment.content);
+    setOpenDropdown(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingComment(null);
+    setEditText("");
+  };
+
+  const shareConfig = {
+    url: window.location.href,
+    title: article.title,
+    description: article.content.substring(0, 100) + "...",
+    hashtags: article.category?.name || "NewsHub",
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return "Just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400)
+      return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800)
+      return `${Math.floor(diffInSeconds / 86400)}d ago`;
+
+    return date.toLocaleDateString();
   };
 
   const CommentItem = ({
@@ -442,6 +635,8 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     const isOwner = user?.id === comment.user_id;
     const isEditing = editingComment === comment.id;
     const showingReply = showReplyInput === comment.id;
+    const isDropdownOpen = openDropdown === comment.id;
+    const isDeletingThis = isDeleting === comment.id;
 
     return (
       <div
@@ -449,75 +644,115 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
           depth > 0 ? "ml-8 mt-4 border-l-2 border-gray-200 pl-4" : "mt-4"
         }`}
       >
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3 flex-1">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+            <div className="flex items-start gap-3 flex-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
                 {comment.user?.name?.charAt(0).toUpperCase() || "?"}
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-gray-900">
                     {comment.user?.name || "Anonymous"}
                   </p>
                   <span className="text-xs text-gray-500">
-                    {new Date(comment.created_at).toLocaleDateString()}
+                    {formatDate(comment.created_at)}
                   </span>
+                  {comment.updated_at !== comment.created_at && (
+                    <span className="text-xs text-gray-400 italic">
+                      (edited)
+                    </span>
+                  )}
                 </div>
+
                 {isEditing ? (
                   <div className="mt-2">
                     <Textarea
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
                       className="min-h-[80px]"
+                      placeholder="Edit your comment..."
                     />
                     <div className="flex gap-2 mt-2">
                       <Button
                         size="sm"
                         onClick={() => updateComment(comment.id)}
+                        disabled={isUpdating || !editText.trim()}
                       >
-                        Save
+                        {isUpdating ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Save"
+                        )}
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setEditingComment(null)}
+                        onClick={cancelEdit}
+                        disabled={isUpdating}
                       >
                         Cancel
                       </Button>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-700 mt-1">{comment.content}</p>
+                  <p className="text-gray-700 mt-1 break-words">
+                    {comment.content}
+                  </p>
                 )}
               </div>
             </div>
 
             {isOwner && !isEditing && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() =>
+                    setOpenDropdown(isDropdownOpen ? null : comment.id)
+                  }
+                  disabled={isDeletingThis}
+                >
+                  {isDeletingThis ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
                     <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => startEdit(comment)}>
-                    <Edit2 className="h-4 w-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => deleteComment(comment.id)}
-                    className="text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  )}
+                </Button>
+
+                {isDropdownOpen && !isDeletingThis && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setOpenDropdown(null)}
+                    />
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                      <button
+                        onClick={() => startEdit(comment)}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-700"
+                      >
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteComment(comment.id)}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
-          {!isEditing && (
+          {!isEditing && !isDeletingThis && (
             <div className="flex items-center gap-4 mt-3 text-sm">
               <button
                 onClick={() => toggleCommentLike(comment.id, comment.is_liked)}
@@ -526,6 +761,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
                     ? "text-blue-600 font-semibold"
                     : "text-gray-600"
                 }`}
+                disabled={!user}
               >
                 <ThumbsUp
                   className={`h-4 w-4 ${
@@ -540,6 +776,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
                   setShowReplyInput(showingReply ? null : comment.id)
                 }
                 className="flex items-center gap-1 text-gray-600 hover:text-blue-600 transition"
+                disabled={!user}
               >
                 <Reply className="h-4 w-4" />
                 Reply
@@ -553,32 +790,67 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
               )}
             </div>
           )}
+
+          {isDeletingThis && (
+            <div className="mt-3 text-sm text-gray-500">
+              Deleting comment...
+            </div>
+          )}
         </div>
 
         {showingReply && user && (
-          <div className="ml-8 mt-3 bg-white rounded-lg border p-3">
-            <Textarea
-              placeholder={`Reply to ${comment.user?.name || "user"}...`}
-              value={replyTexts[comment.id] || ""}
-              onChange={(e) =>
-                setReplyTexts({ ...replyTexts, [comment.id]: e.target.value })
-              }
-              className="min-h-[60px] mb-2"
-            />
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => postReply(comment.id)}>
-                Post Reply
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setShowReplyInput(null);
-                  setReplyTexts({ ...replyTexts, [comment.id]: "" });
-                }}
-              >
-                Cancel
-              </Button>
+          <div className="ml-8 mt-3 bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 text-sm">
+                {user.name?.charAt(0).toUpperCase() || "?"}
+              </div>
+              <div className="flex-1">
+                <Textarea
+                  placeholder={`Reply to ${comment.user?.name || "user"}...`}
+                  value={replyTexts[comment.id] || ""}
+                  onChange={(e: any) =>
+                    setReplyTexts({
+                      ...replyTexts,
+                      [comment.id]: e.target.value,
+                    })
+                  }
+                  className="min-h-[60px] mb-2"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => postReply(comment.id)}
+                    disabled={
+                      !replyTexts[comment.id]?.trim() ||
+                      isPostingReply === comment.id
+                    }
+                  >
+                    {isPostingReply === comment.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Posting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-1" />
+                        Reply
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setShowReplyInput(null);
+                      setReplyTexts({ ...replyTexts, [comment.id]: "" });
+                    }}
+                    disabled={isPostingReply === comment.id}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -594,32 +866,55 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     );
   };
 
+  const totalComments = (comments: CommentWithEngagement[]): number => {
+    let count = comments.length;
+    comments.forEach((comment) => {
+      if (comment.replies && comment.replies.length > 0) {
+        count += totalComments(comment.replies);
+      }
+    });
+    return count;
+  };
+
   return (
     <div className="max-w-4xl mx-auto py-10 px-4">
+      {/* Article Card */}
       <article className="bg-white rounded-xl shadow-sm overflow-hidden mb-8">
-        <img
-          src={
-            article.thumbnail
-              ? `${API?.replace("/api", "")}/storage/${article.thumbnail}`
-              : "/placeholder.svg"
-          }
-          alt={article.title}
-          className="w-full h-auto object-cover max-h-96"
-        />
+        {article.thumbnail && (
+          <img
+            src={
+              article.thumbnail.startsWith("http")
+                ? article.thumbnail
+                : `${API?.replace("/api", "")}/storage/${article.thumbnail}`
+            }
+            alt={article.title}
+            className="w-full h-auto object-cover max-h-96"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = "/placeholder.svg";
+            }}
+          />
+        )}
 
         <div className="p-8">
           <h1 className="text-4xl font-bold mb-4 text-gray-900">
             {article.title}
           </h1>
 
-          <div className="flex items-center gap-4 mb-6 text-sm text-gray-600">
-            <span>By {article.author?.name || "Anonymous"}</span>
+          <div className="flex items-center gap-4 mb-6 text-sm text-gray-600 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                {article.author?.name?.charAt(0).toUpperCase() || "A"}
+              </div>
+              <span className="font-medium">
+                {article.author?.name || "Anonymous"}
+              </span>
+            </div>
             <span>•</span>
-            <span>{new Date(article.created_at).toLocaleDateString()}</span>
+            <span>{formatDate(article.created_at)}</span>
             {article.category && (
               <>
                 <span>•</span>
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full">
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
                   {article.category.name}
                 </span>
               </>
@@ -627,48 +922,70 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
           </div>
 
           <div className="prose max-w-none mb-8">
-            <p className="text-gray-700 text-lg leading-relaxed">
+            <p className="text-gray-700 text-lg leading-relaxed whitespace-pre-wrap">
               {article.content}
             </p>
           </div>
 
-          <div className="flex items-center gap-6 py-4 border-y border-gray-200">
+          {/* Article Engagement Buttons */}
+          <div className="flex items-center gap-4 py-4 border-y border-gray-200">
+            {/* Like Button */}
             <button
-              onClick={toggleLike}
+              onClick={toggleArticleLike}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
                 liked
-                  ? "bg-red-50 text-red-600"
+                  ? "bg-red-50 text-red-600 hover:bg-red-100"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+              } ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
+              disabled={!user || isLiking}
+              aria-label={liked ? "Unlike article" : "Like article"}
             >
-              <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+              {isLiking ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+              )}
               <span className="font-semibold">{likes}</span>
             </button>
 
+            {/* Comment Button */}
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
               <MessageCircle className="h-5 w-5" />
-              <span className="font-semibold">{comments.length}</span>
+              <span className="font-semibold">{totalComments(comments)}</span>
             </button>
 
+            {/* Bookmark Button */}
             <button
               onClick={toggleBookmark}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
                 bookmarked
-                  ? "bg-yellow-50 text-yellow-600"
+                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+              } ${isBookmarking ? "opacity-50 cursor-not-allowed" : ""}`}
+              disabled={!user || isBookmarking}
+              aria-label={bookmarked ? "Remove bookmark" : "Bookmark article"}
             >
-              <Bookmark
-                className={`h-5 w-5 ${bookmarked ? "fill-current" : ""}`}
-              />
+              {isBookmarking ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Bookmark
+                  className={`h-5 w-5 ${bookmarked ? "fill-current" : ""}`}
+                />
+              )}
+              <span className="font-medium">Bookmark</span>
             </button>
+            <SocialShare
+              config={shareConfig}
+              variant="button" // or "icon" if you want the icon variant
+            />
           </div>
         </div>
       </article>
 
+      {/* Comments Section */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="text-2xl font-bold mb-6 text-gray-900">
-          Comments ({comments.length})
+          Comments ({totalComments(comments)})
         </h3>
 
         {user ? (
@@ -688,27 +1005,51 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
                   onClick={postComment}
                   disabled={!commentText.trim() || isPostingComment}
                 >
-                  {isPostingComment ? "Posting..." : "Post Comment"}
+                  {isPostingComment ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Posting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Post Comment
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
           </div>
         ) : (
-          <div className="mb-8 p-4 bg-blue-50 rounded-lg text-center">
-            <p className="text-blue-900">Please login to leave a comment</p>
+          <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg text-center border border-blue-100">
+            <MessageCircle className="h-12 w-12 mx-auto mb-3 text-blue-600" />
+            <p className="text-blue-900 font-semibold mb-2">
+              Join the conversation
+            </p>
+            <p className="text-blue-700 text-sm">
+              Please login to leave a comment and engage with others
+            </p>
           </div>
         )}
 
         <div className="space-y-4">
           {isLoadingComments ? (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-2 text-gray-500">Loading comments...</p>
+            <div className="text-center py-12">
+              <Loader2 className="h-12 w-12 mx-auto animate-spin text-gray-400" />
+              <p className="mt-4 text-gray-500 font-medium">
+                Loading comments...
+              </p>
             </div>
           ) : comments.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">
-              No comments yet. Be the first to comment!
-            </p>
+            <div className="text-center py-12">
+              <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+              <p className="text-gray-500 text-lg font-medium mb-2">
+                No comments yet
+              </p>
+              <p className="text-gray-400">
+                Be the first to share your thoughts!
+              </p>
+            </div>
           ) : (
             comments.map((comment) => (
               <CommentItem key={comment.id} comment={comment} />

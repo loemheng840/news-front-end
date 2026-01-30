@@ -48,6 +48,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Plus,
   Edit,
@@ -57,6 +64,17 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  BarChart3,
+  TrendingUp,
+  Clock,
+  Search,
+  Filter,
+  MoreVertical,
+  CalendarDays,
+  User,
+  EyeOff,
+  ThumbsUp,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -67,6 +85,7 @@ const API = process.env.NEXT_PUBLIC_API_URL;
 export default function AdminDashboardPage() {
   const { user, isLoading, token } = useAuth();
   const [articles, setArticles] = useState<any[]>([]);
+  const [filteredArticles, setFilteredArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -79,11 +98,56 @@ export default function AdminDashboardPage() {
     content: "",
     status: "DRAFT",
   });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
 
   useEffect(() => {
     if (!user) return;
     loadArticles();
   }, [user]);
+
+  useEffect(() => {
+    let filtered = [...articles];
+
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter(
+        (article) =>
+          article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          article.content?.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
+
+    // Filter by status tab
+    if (activeTab !== "all") {
+      filtered = filtered.filter(
+        (article) => article.status === activeTab.toUpperCase(),
+      );
+    }
+
+    // Sort articles
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "newest":
+          return (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        case "oldest":
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        case "views":
+          return (b.views || 0) - (a.views || 0);
+        case "likes":
+          return (b.likes_count || 0) - (a.likes_count || 0);
+        default:
+          return 0;
+      }
+    });
+
+    setFilteredArticles(filtered);
+  }, [articles, searchQuery, activeTab, sortBy]);
 
   useEffect(() => {
     if (error || success) {
@@ -97,7 +161,7 @@ export default function AdminDashboardPage() {
 
   const loadArticles = async () => {
     try {
-      const res = await fetch(`${API}/articles/admin`, {
+      const res = await fetch(`${API}/articles/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
@@ -107,7 +171,9 @@ export default function AdminDashboardPage() {
       if (!res.ok) throw new Error("Failed to load articles");
 
       const json = await res.json();
-      setArticles(json.data || json);
+      const data = json.data || json;
+      setArticles(data);
+      setFilteredArticles(data);
     } catch (err) {
       console.error(err);
       setError("Failed to load articles");
@@ -195,195 +261,517 @@ export default function AdminDashboardPage() {
     }
   };
 
-  if (isLoading || loading) return null;
-  if (!user || user.role !== "ADMIN") redirect("/");
+  if (isLoading || loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || (user.role !== "ADMIN" && user.role !== "AUTHOR")) {
+    redirect("/");
+  }
 
   const stats = {
     total: articles.length,
     published: articles.filter((a) => a.status === "PUBLISHED").length,
     drafts: articles.filter((a) => a.status === "DRAFT").length,
     views: articles.reduce((sum, a) => sum + (a.views || 0), 0),
+    likes: articles.reduce((sum, a) => sum + (a.likes_count || 0), 0),
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "PUBLISHED":
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case "DRAFT":
-        return <FileText className="h-4 w-4 text-muted-foreground" />;
-      default:
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
-    }
+  const getStatusBadge = (status: string) => {
+    const variants = {
+      PUBLISHED: "bg-green-500/10 text-green-700 border-green-500/20",
+      DRAFT: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20",
+      ARCHIVED: "bg-gray-500/10 text-gray-700 border-gray-500/20",
+    };
+
+    const icons = {
+      PUBLISHED: <CheckCircle2 className="h-3 w-3" />,
+      DRAFT: <FileText className="h-3 w-3" />,
+      ARCHIVED: <EyeOff className="h-3 w-3" />,
+    };
+
+    return (
+      <Badge
+        variant="outline"
+        className={`gap-1.5 ${variants[status as keyof typeof variants] || "bg-gray-500/10"}`}
+      >
+        {icons[status as keyof typeof icons] || (
+          <AlertCircle className="h-3 w-3" />
+        )}
+        {status}
+      </Badge>
+    );
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-gray-50 to-white">
       <Navbar />
 
       <main className="flex-1 container mx-auto px-4 py-8">
-        {/* Success/Error Messages */}
-        {(error || success) && (
-          <div className="mb-4">
-            {error && (
-              <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-md border border-destructive/20">
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="bg-green-50 text-green-800 px-4 py-3 rounded-md border border-green-200">
-                {success}
-              </div>
-            )}
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+              <p className="text-muted-foreground mt-1">
+                Manage your articles and track performance
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/dashboard/analytics">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Analytics
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link href="/dashboard/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Article
+                </Link>
+              </Button>
+            </div>
           </div>
-        )}
 
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-            <p className="text-muted-foreground">
-              Manage all articles in the system.
-            </p>
-          </div>
-
-          <Button asChild>
-            <Link href="/dashboard/new">
-              <Plus className="mr-2 h-4 w-4" /> New Article
-            </Link>
-          </Button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[
-            { label: "Total Articles", value: stats.total, icon: FileText },
-            { label: "Published", value: stats.published, icon: CheckCircle2 },
-            { label: "Drafts", value: stats.drafts, icon: FileText },
-            { label: "Total Views", value: stats.views, icon: Eye },
-          ].map((stat, i) => (
-            <Card key={i}>
-              <CardContent className="pt-6">
-                <div className="flex justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      {stat.label}
-                    </p>
-                    <p className="text-2xl font-bold">{stat.value}</p>
-                  </div>
-                  <stat.icon className="h-8 w-8 text-primary/20" />
+          {/* Success/Error Messages */}
+          {(error || success) && (
+            <div className="mb-6 animate-in fade-in">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600" />
+                  <p className="text-red-700">{error}</p>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              )}
+              {success && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <p className="text-green-700">{success}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>All Articles</CardTitle>
-            <CardDescription>
-              View and manage all published and draft content.
-            </CardDescription>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-700 mb-1">
+                    Total Articles
+                  </p>
+                  <p className="text-3xl font-bold text-blue-900">
+                    {stats.total}
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-full bg-blue-600/10 flex items-center justify-center">
+                  <BookOpen className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-700 mb-1">
+                    Published
+                  </p>
+                  <p className="text-3xl font-bold text-green-900">
+                    {stats.published}
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-full bg-green-600/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-yellow-700 mb-1">
+                    Drafts
+                  </p>
+                  <p className="text-3xl font-bold text-yellow-900">
+                    {stats.drafts}
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-full bg-yellow-600/10 flex items-center justify-center">
+                  <FileText className="h-6 w-6 text-yellow-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-700 mb-1">
+                    Total Views
+                  </p>
+                  <p className="text-3xl font-bold text-purple-900">
+                    {stats.views}
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-full bg-purple-600/10 flex items-center justify-center">
+                  <Eye className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-pink-50 to-pink-100 border-pink-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-pink-700 mb-1">
+                    Total Likes
+                  </p>
+                  <p className="text-3xl font-bold text-pink-900">
+                    {stats.likes}
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-full bg-pink-600/10 flex items-center justify-center">
+                  <ThumbsUp className="h-6 w-6 text-pink-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Content Card */}
+        <Card className="shadow-lg border-border/40">
+          <CardHeader className="border-b">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle>Articles</CardTitle>
+                <CardDescription>
+                  Manage and organize all your content in one place
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search articles..."
+                    className="pl-9 w-full sm:w-[250px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[140px]">
+                    <Filter className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest</SelectItem>
+                    <SelectItem value="oldest">Oldest</SelectItem>
+                    <SelectItem value="views">Most Views</SelectItem>
+                    <SelectItem value="likes">Most Likes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Status Tabs */}
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="mt-4"
+            >
+              <TabsList className="grid grid-cols-4 w-full sm:w-auto">
+                <TabsTrigger
+                  value="all"
+                  className="data-[state=active]:bg-primary/10"
+                >
+                  All
+                  <Badge variant="secondary" className="ml-2">
+                    {articles.length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="published"
+                  className="data-[state=active]:bg-green-500/10 data-[state=active]:text-green-700"
+                >
+                  Published
+                  <Badge
+                    variant="outline"
+                    className="ml-2 bg-green-500/10 text-green-700"
+                  >
+                    {stats.published}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="draft"
+                  className="data-[state=active]:bg-yellow-500/10 data-[state=active]:text-yellow-700"
+                >
+                  Drafts
+                  <Badge
+                    variant="outline"
+                    className="ml-2 bg-yellow-500/10 text-yellow-700"
+                  >
+                    {stats.drafts}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="archived"
+                  className="data-[state=active]:bg-gray-500/10 data-[state=active]:text-gray-700"
+                >
+                  Archived
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </CardHeader>
 
-          <CardContent>
-            {articles.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No articles found. Create your first article to get started.
+          <CardContent className="p-0">
+            {filteredArticles.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4">
+                <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mb-6">
+                  <FileText className="h-12 w-12 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">
+                  No articles found
+                </h3>
+                <p className="text-muted-foreground text-center max-w-md mb-6">
+                  {searchQuery
+                    ? "No articles match your search criteria. Try different keywords."
+                    : "Get started by creating your first article."}
+                </p>
+                <Button asChild>
+                  <Link href="/dashboard/new">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Article
+                  </Link>
+                </Button>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Author</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Likes</TableHead>
-                    <TableHead>Views</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-
-                <TableBody>
-                  {articles.map((article) => (
-                    <TableRow key={article.id}>
-                      <TableCell className="font-medium">
-                        {article.title}
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="outline">{article.author?.name}</Badge>
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {article.category?.name}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell className="flex items-center gap-2">
-                        {getStatusIcon(article.status)}
-                        {article.status}
-                      </TableCell>
-
-                      <TableCell>
-                        {article.likes_count ?? article.likes?.length ?? 0}
-                      </TableCell>
-                      <TableCell>{article.views ?? 0}</TableCell>
-
-                      <TableCell>
-                        {format(new Date(article.created_at), "MMM d, yyyy")}
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" asChild>
-                            <Link href={`/article/${article.slug}`}>
-                              <Eye className="h-4 w-4" />
-                            </Link>
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(article)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            onClick={() => handleDeleteClick(article)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[300px]">Article</TableHead>
+                      <TableHead>Author</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Likes</TableHead>
+                      <TableHead className="text-center">Views</TableHead>
+                      <TableHead>Last Updated</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredArticles.map((article) => (
+                      <TableRow
+                        key={article.id}
+                        className="group hover:bg-muted/50"
+                      >
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Link
+                              href={`/article/${article.slug}`}
+                              className="font-semibold text-foreground hover:text-primary transition-colors"
+                            >
+                              {article.title}
+                            </Link>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <User className="h-3 w-3" />
+                              <span>{article.author?.name || "Unknown"}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              {article.category && (
+                                <>
+                                  <Badge variant="outline" className="text-xs">
+                                    {article.category?.name}
+                                  </Badge>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(article.status)}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <ThumbsUp className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">
+                              {article.likes_count ||
+                                article.likes?.length ||
+                                0}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">
+                              {article.views || 0}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <CalendarDays className="h-3 w-3" />
+                            {format(
+                              new Date(article.updated_at),
+                              "MMM d, yyyy",
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" asChild>
+                                    <Link href={`/article/${article.slug}`}>
+                                      <Eye className="h-4 w-4" />
+                                    </Link>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Preview</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleEdit(article)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:text-destructive"
+                                    onClick={() => handleDeleteClick(article)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Quick Stats Footer */}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    Avg. Views per Article
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {articles.length > 0
+                      ? Math.round(stats.views / articles.length)
+                      : 0}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-6 w-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Publish Rate</p>
+                  <p className="text-2xl font-bold">
+                    {articles.length > 0
+                      ? Math.round((stats.published / articles.length) * 100)
+                      : 0}
+                    %
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                  <Clock className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Last Article</p>
+                  <p className="text-2xl font-bold">
+                    {articles.length > 0
+                      ? format(new Date(articles[0].created_at), "MMM d")
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[700px]">
           <DialogHeader>
-            <DialogTitle>Edit Article</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5" />
+              Edit Article
+            </DialogTitle>
             <DialogDescription>
-              Make changes to your article here. Click save when you're done.
+              Update the article details below. Changes will be saved
+              immediately.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="title">Title</Label>
+          <div className="grid gap-5 py-4">
+            <div className="grid gap-2.5">
+              <Label htmlFor="title" className="text-sm font-medium">
+                Title
+              </Label>
               <Input
                 id="title"
                 value={editForm.title}
@@ -391,24 +779,30 @@ export default function AdminDashboardPage() {
                   setEditForm({ ...editForm, title: e.target.value })
                 }
                 disabled={submitting}
+                className="h-11"
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="content">Content</Label>
+            <div className="grid gap-2.5">
+              <Label htmlFor="content" className="text-sm font-medium">
+                Content
+              </Label>
               <Textarea
                 id="content"
-                rows={8}
+                rows={10}
                 value={editForm.content}
                 onChange={(e) =>
                   setEditForm({ ...editForm, content: e.target.value })
                 }
                 disabled={submitting}
+                className="resize-none font-mono text-sm"
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="status">Status</Label>
+            <div className="grid gap-2.5">
+              <Label htmlFor="status" className="text-sm font-medium">
+                Status
+              </Label>
               <Select
                 value={editForm.status}
                 onValueChange={(value) =>
@@ -416,27 +810,46 @@ export default function AdminDashboardPage() {
                 }
                 disabled={submitting}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="DRAFT">Draft</SelectItem>
-                  <SelectItem value="PUBLISHED">Published</SelectItem>
+                  <SelectItem value="DRAFT">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Draft
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="PUBLISHED">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      Published
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-3">
             <Button
               variant="outline"
               onClick={() => setEditDialogOpen(false)}
               disabled={submitting}
+              className="h-11"
             >
               Cancel
             </Button>
-            <Button onClick={handleUpdate} disabled={submitting}>
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button
+              onClick={handleUpdate}
+              disabled={submitting}
+              className="h-11 gap-2"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
               Save Changes
             </Button>
           </DialogFooter>
@@ -447,21 +860,42 @@ export default function AdminDashboardPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              article "{selectedArticle?.title}" and remove it from the system.
-            </AlertDialogDescription>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <AlertDialogTitle>Delete Article</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </div>
+            </div>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+          <div className="py-4">
+            <p className="text-muted-foreground">
+              You're about to delete{" "}
+              <span className="font-semibold text-foreground">
+                "{selectedArticle?.title}"
+              </span>
+              . All associated data will be permanently removed.
+            </p>
+          </div>
+          <AlertDialogFooter className="gap-3">
+            <AlertDialogCancel disabled={submitting} className="h-11">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={submitting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="h-11 bg-red-600 hover:bg-red-700 text-white gap-2"
             >
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete Article
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

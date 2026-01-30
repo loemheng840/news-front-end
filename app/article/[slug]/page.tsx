@@ -48,7 +48,6 @@ export default function ArticleDetailPage() {
   return (
     <>
       <Navbar />
-
       <ArticleDetailClient
         article={article}
         author={article.author}

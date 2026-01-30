@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { CardSwapHero } from "@/components/card-swap-hero";
 import { ArticleCard } from "@/components/article-card";
 import { SearchBox } from "@/components/search-box";
+import { InfiniteAutoScroll } from "@/components/auto-scoll";
 import {
   getTrendingArticles,
   getAllTags,
@@ -31,30 +32,30 @@ export default function Home() {
       const articleList = Array.isArray(json)
         ? json
         : Array.isArray(json.data)
-        ? json.data
-        : Array.isArray(json.articles)
-        ? json.articles
-        : [];
+          ? json.data
+          : Array.isArray(json.articles)
+            ? json.articles
+            : [];
 
       setArticles(articleList);
 
       const latestRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/articles/latest`
+        `${process.env.NEXT_PUBLIC_API_URL}/articles/latest`,
       );
       const latestJson = await latestRes.json();
 
       const catRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/categories`
+        `${process.env.NEXT_PUBLIC_API_URL}/categories`,
       );
       const catJson = await catRes.json();
 
       const categoryList = Array.isArray(catJson)
         ? catJson
         : Array.isArray(catJson.data)
-        ? catJson.data
-        : Array.isArray(catJson.categories)
-        ? catJson.categories
-        : [];
+          ? catJson.data
+          : Array.isArray(catJson.categories)
+            ? catJson.categories
+            : [];
 
       setCategories(categoryList);
     };
@@ -75,7 +76,7 @@ export default function Home() {
       .sort(
         (a, b) =>
           new Date(b.published_at || b.created_at).getTime() -
-          new Date(a.published_at || a.created_at).getTime()
+          new Date(a.published_at || a.created_at).getTime(),
       )
       .slice(0, 6);
   }, [searchQuery, articles]);
@@ -96,8 +97,11 @@ export default function Home() {
             value={searchQuery}
             onChange={(e: any) => setSearchQuery(e.target.value)}
             placeholder="Search..."
-            className="w-full border px-4 py-2 rounded"
+            className="w-full  px-4 py-2 rounded"
           />
+        </div>
+        <div>
+          <InfiniteAutoScroll />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

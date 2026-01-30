@@ -34,7 +34,7 @@ export function CardSwapHero({ articles }: CardSwapHeroProps) {
 
   const category = mockCategories.find((c) => c.id === article.category_id);
   const nextCategory = mockCategories.find(
-    (c) => c.id === nextArticle.category_id
+    (c) => c.id === nextArticle.category_id,
   );
 
   const imageUrl = article.thumbnail
@@ -77,7 +77,7 @@ export function CardSwapHero({ articles }: CardSwapHeroProps) {
                     <p className="text-white/80 text-sm mt-2">
                       By {article.author?.name || "Staff"} •{" "}
                       {new Date(
-                        article.published_at || article.created_at
+                        article.published_at || article.created_at,
                       ).toLocaleDateString()}
                     </p>
                   </div>
@@ -115,7 +115,7 @@ export function CardSwapHero({ articles }: CardSwapHeroProps) {
                     <p className="text-white/80 text-sm mt-2">
                       By {nextArticle.author?.name || "Staff"} •{" "}
                       {new Date(
-                        nextArticle.published_at || nextArticle.created_at
+                        nextArticle.published_at || nextArticle.created_at,
                       ).toLocaleDateString()}
                     </p>
                   </div>
@@ -138,41 +138,37 @@ export function CardSwapHero({ articles }: CardSwapHeroProps) {
           <p className="text-lg text-muted-foreground leading-relaxed">
             {article.excerpt}
           </p>
-
-          <div className="flex items-center gap-4 pt-4 border-t border-border">
-            {article.author?.avatar && (
-              <Image
-                src={article.author.avatar || "/placeholder.svg"}
-                alt={article.author?.name || "Staff"}
-                width={48}
-                height={48}
-                className="h-12 w-12 rounded-full object-cover"
-              />
-            )}
-            <div>
-              <p className="font-semibold">{article.author?.name || "Staff"}</p>
-              <p className="text-xs text-muted-foreground">
-                {new Date(
-                  article.published_at || article.created_at
-                ).toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pt-6 mt-6 border-t border-border">
+            {/* Author Info */}
+            <div className="flex items-center gap-4">
+              <div className="leading-tight">
+                <p className="text-xl font-semibold">
+                  {article.author?.name || "Staff"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {new Date(
+                    article.published_at || article.created_at,
+                  ).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
             </div>
+
+            {/* CTA */}
+            <Link
+              href={`/article/${article.slug}`}
+              className="inline-flex items-center justify-center gap-2 px-7 py-3 text-sm font-semibold rounded-xl
+               bg-primary text-primary-foreground
+               hover:bg-primary/90
+               focus:outline-none focus:ring-2 focus:ring-primary/40
+               transition-all duration-200 shadow-md hover:shadow-lg"
+            >
+              Read Full Story
+            </Link>
           </div>
-
-          <Link
-            href={`/article/${article.slug}`}
-            className="inline-flex items-center justify-center px-8 py-3 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-lg transition-colors"
-          >
-            Read Full Story
-          </Link>
-
-          <p className="text-xs text-muted-foreground pt-2">
-            Click the button on the image to explore more featured stories
-          </p>
         </div>
       </div>
     </section>

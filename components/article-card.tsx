@@ -28,6 +28,7 @@ export function ArticleCard({
         article.thumbnail
       }`
     : "/placeholder.svg";
+
   const [saved, setSaved] = useState(article.bookmarks || false);
 
   const toggleBookmark = async () => {
@@ -39,8 +40,9 @@ export function ArticleCard({
         method,
         headers: {
           Accept: "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-      }
+      },
     );
 
     setSaved(!saved);
