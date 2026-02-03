@@ -72,11 +72,7 @@ function SocialShare({ config, variant = "button" }: SocialShareProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-full bg-transparent"
-        >
+        <Button variant="outline" size="sm" className="rounded-full">
           <Share2 className="mr-2 h-4 w-4" /> Share
         </Button>
       </DropdownMenuTrigger>

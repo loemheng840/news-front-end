@@ -680,7 +680,7 @@ export default function NewArticlePage() {
                       ) : (
                         <>
                           <Save className="h-5 w-5 mr-2" />
-                          Save as Draft
+                          Save as Public
                         </>
                       )}
                     </Button>

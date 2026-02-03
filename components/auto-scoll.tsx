@@ -91,26 +91,6 @@ export function InfiniteAutoScroll() {
 
   return (
     <div className="relative w-full">
-      {/* Controls */}
-      {/* <div className="flex justify-center items-center gap-4 mb-6">
-        <div className="flex items-center gap-2 bg-gray-900/80 backdrop-blur-sm rounded-full px-4 py-2">
-          <button
-            onClick={() => scrollManual("left")}
-            className="p-2 hover:bg-gray-800 rounded-full transition-colors"
-            aria-label="Scroll left"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <button
-            onClick={() => scrollManual("right")}
-            className="p-2 hover:bg-gray-800 rounded-full transition-colors"
-            aria-label="Scroll right"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-      </div> */}
-
       {/* Scroll Container */}
       <div
         ref={scrollContainerRef}

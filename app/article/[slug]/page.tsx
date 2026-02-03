@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import Image from "next/image";
 import ArticleDetailClient from "@/components/article-detail-client";
+import Loading from "@/app/loading";
 
 export default function ArticleDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -26,7 +27,7 @@ export default function ArticleDetailPage() {
       setArticle(articleData);
 
       const commentsRes = await fetch(
-        `${API}/articles/${articleData.id}/comments`
+        `${API}/articles/${articleData.id}/comments`,
       );
       const commentsData = await commentsRes.json();
       setComments(commentsData);
@@ -48,13 +49,7 @@ export default function ArticleDetailPage() {
   return (
     <>
       <Navbar />
-      <ArticleDetailClient
-        article={article}
-        author={article.author}
-        category={article.category}
-        comments={comments}
-        relatedArticles={[]}
-      />
+      <ArticleDetailClient article={article} />
     </>
   );
 }

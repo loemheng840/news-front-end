@@ -71,11 +71,13 @@ export function SearchBox({
           type="submit"
           className="
             absolute right-2
-            h-10 px-6 rounded-full
+            h-10 px-5
+            rounded-full
             bg-primary text-primary-foreground
             text-sm font-semibold
             hover:bg-primary/90
             transition shadow
+            whitespace-nowrap
           "
         >
           Search

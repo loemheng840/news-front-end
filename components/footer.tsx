@@ -10,7 +10,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
           <div className="col-span-1 md:col-span-1">
             <Link href="/" className="text-2xl font-bold text-white mb-4 block">
-              NewsHub
+              CamboNews
             </Link>
             <p className="text-sm text-white mb-6">
               Your trusted source for quality journalism, in-depth analysis, and
@@ -83,7 +83,7 @@ export function Footer() {
         </div>
 
         <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-white">
-          <p>© {currentYear} NewsHub Media Group. All rights reserved.</p>
+          <p>© {currentYear} CamboNews Media Group. All rights reserved.</p>
           <div className="flex gap-6">
             <Link href="/privacy" className="hover:text-primary">
               Privacy Policy

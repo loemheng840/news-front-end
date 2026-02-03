@@ -59,15 +59,6 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            {/* <TextCursor
-              text="Hello!"
-              spacing={80}
-              followMouseDirection
-              randomFloat
-              exitDuration={0.3}
-              removalInterval={20}
-              maxPoints={10}
-            /> */}
             <div className="flex flex-col min-h-screen">
               <main className="flex-1">{children}</main>
               <Footer />

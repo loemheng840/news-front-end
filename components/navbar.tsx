@@ -27,7 +27,7 @@ export function Navbar() {
 
   const navLinks = [
     { name: "Home", href: "/" },
-    { name: "Latest", href: "/latest" },
+    { name: "Breaking", href: "/latest" },
     { name: "Technology", href: "/category/technology" },
     { name: "Politics", href: "/category/politics" },
     { name: "Business", href: "/category/business" },
@@ -71,15 +71,6 @@ export function Navbar() {
             </nav>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowSearchBox(!showSearchBox)}
-                className="text-primary-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-200"
-              >
-                <Search className="h-5 w-5" />
-                <span className="sr-only">Search</span>
-              </Button>
               <ThemeToggle />
 
               {user ? (
@@ -182,14 +173,6 @@ export function Navbar() {
               </Button>
             </div>
           </div>
-
-          {showSearchBox && (
-            <div className="border-t border-primary-foreground/20 bg-primary p-4">
-              <div className="max-w-2xl">
-                <SearchBox />
-              </div>
-            </div>
-          )}
         </div>
 
         {isMenuOpen && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Heart,
   MessageCircle,
@@ -14,6 +14,11 @@ import {
   X,
   Loader2,
   Share2,
+  Calendar,
+  User,
+  Tag,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import SocialShare from "./social-share";
 
@@ -93,7 +98,7 @@ const Button = ({
   ...props
 }: any) => {
   const baseStyles =
-    "rounded-lg font-medium transition inline-flex items-center justify-center";
+    "rounded-lg font-medium transition inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2";
   const sizeStyles = size === "sm" ? "px-3 py-1.5 text-sm" : "px-4 py-2";
   const variantStyles =
     variant === "outline"
@@ -102,7 +107,9 @@ const Button = ({
         ? "bg-transparent hover:bg-gray-100 text-gray-700"
         : variant === "danger"
           ? "bg-red-600 hover:bg-red-700 text-white"
-          : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed";
+          : variant === "secondary"
+            ? "bg-gray-600 hover:bg-gray-700 text-white"
+            : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed";
 
   return (
     <button
@@ -120,9 +127,406 @@ const Button = ({
 const Textarea = ({ className = "", ...props }: any) => {
   return (
     <textarea
-      className={`w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${className}`}
+      className={`w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition ${className}`}
       {...props}
     />
+  );
+};
+
+// Comment Item Component (Facebook-style)
+const CommentItem = ({
+  comment,
+  depth = 0,
+  user,
+  token,
+  onReply,
+  onEdit,
+  onDelete,
+  onLike,
+  isDeleting,
+  isPostingReply,
+  editingComment,
+  editText,
+  setEditText,
+  isUpdating,
+  cancelEdit,
+  showReplyInput,
+  replyTexts,
+  setReplyTexts,
+  setShowReplyInput,
+  onLoadReplies,
+  isLoadingReplies,
+}: any) => {
+  const isOwner = user?.id === comment.user_id;
+  const isAdmin = user?.role === "ADMIN";
+  const isEditing = editingComment === comment.id;
+  const showingReply = showReplyInput === comment.id;
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showReplies, setShowReplies] = useState(true);
+  const isDeletingThis = isDeleting === comment.id;
+  const isLoadingRepliesThis = isLoadingReplies === comment.id;
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return "just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const getInitials = (name: string) => {
+    return (
+      name
+        ?.split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2) || "?"
+    );
+  };
+
+  const getAvatarColor = (id: number) => {
+    const colors = [
+      "from-blue-400 to-cyan-500",
+      "from-purple-400 to-pink-500",
+      "from-green-400 to-teal-500",
+      "from-orange-400 to-red-500",
+      "from-indigo-400 to-blue-500",
+      "from-yellow-400 to-orange-500",
+      "from-pink-400 to-rose-500",
+      "from-teal-400 to-green-500",
+    ];
+    return colors[id % colors.length];
+  };
+
+  const replyCount = comment.replies?.length || 0;
+
+  return (
+    <div className={`${depth > 0 ? "ml-10 mt-3" : "mt-4"}`}>
+      {/* Main Comment */}
+      <div className="flex gap-2 group">
+        {/* Avatar */}
+        <div
+          className={`${depth > 0 ? "w-8 h-8" : "w-10 h-10"} rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 bg-gradient-to-br ${getAvatarColor(
+            comment.user?.id || 0,
+          )} shadow-md`}
+        >
+          <span className={depth > 0 ? "text-xs" : "text-sm"}>
+            {getInitials(comment.user?.name)}
+          </span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Comment Bubble */}
+          {isEditing ? (
+            <div className="bg-white rounded-2xl border border-blue-300 shadow-sm p-3">
+              <Textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="min-h-[80px] text-sm border-gray-200"
+                placeholder="Edit your comment..."
+                autoFocus
+              />
+              <div className="flex gap-2 mt-2">
+                <Button
+                  size="sm"
+                  onClick={() => onEdit(comment.id)}
+                  disabled={isUpdating || !editText.trim()}
+                  className="text-xs h-7"
+                >
+                  {isUpdating ? (
+                    <>
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelEdit}
+                  disabled={isUpdating}
+                  className="text-xs h-7"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`bg-gray-100 rounded-2xl px-4 py-2.5 inline-block max-w-full ${
+                isDeletingThis ? "opacity-50" : ""
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-semibold text-gray-900 text-sm">
+                      {comment.user?.name || "Anonymous"}
+                    </p>
+                    {comment.user?.role === "ADMIN" && (
+                      <span className="px-1.5 py-0.5 bg-purple-500 text-white text-[10px] font-bold rounded">
+                        ADMIN
+                      </span>
+                    )}
+                    {comment.user?.role === "AUTHOR" && (
+                      <span className="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded">
+                        AUTHOR
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-800 text-sm break-words leading-relaxed">
+                    {comment.content}
+                  </p>
+                </div>
+
+                {/* Dropdown Menu */}
+                {(isOwner || isAdmin) && !isDeletingThis && (
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      className="p-1 hover:bg-gray-200 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <MoreVertical className="h-3.5 w-3.5 text-gray-600" />
+                    </button>
+
+                    {isDropdownOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setIsDropdownOpen(false)}
+                        />
+                        <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-20">
+                          {isOwner && (
+                            <button
+                              onClick={() => {
+                                onEdit(comment.id, comment.content);
+                                setIsDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center text-gray-700 text-sm"
+                            >
+                              <Edit2 className="h-3.5 w-3.5 mr-2" />
+                              Edit
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  "Are you sure you want to delete this comment?",
+                                )
+                              ) {
+                                onDelete(comment.id);
+                                setIsDropdownOpen(false);
+                              }
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center text-red-600 text-sm"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-2" />
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons (Facebook-style) */}
+          {!isEditing && !isDeletingThis && (
+            <div className="flex items-center gap-3 mt-1 px-3 text-xs font-semibold">
+              <button
+                onClick={() => onLike(comment.id, comment.is_liked)}
+                className={`${
+                  comment.is_liked
+                    ? "text-blue-600"
+                    : "text-gray-600 hover:text-blue-600"
+                } transition`}
+                disabled={!user}
+              >
+                Like
+                {comment.likes_count > 0 && ` · ${comment.likes_count}`}
+              </button>
+
+              <button
+                onClick={() =>
+                  setShowReplyInput(showingReply ? null : comment.id)
+                }
+                className="text-gray-600 hover:text-blue-600 transition"
+                disabled={!user}
+              >
+                Reply
+              </button>
+
+              <span className="text-gray-500 font-normal">
+                {formatDate(comment.created_at)}
+              </span>
+
+              {comment.updated_at !== comment.created_at && (
+                <span className="text-gray-400 font-normal italic">
+                  (edited)
+                </span>
+              )}
+            </div>
+          )}
+
+          {isDeletingThis && (
+            <div className="flex items-center gap-2 text-gray-500 text-xs mt-1 px-3">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Deleting...
+            </div>
+          )}
+
+          {/* Reply Input (Facebook-style) */}
+          {showingReply && user && (
+            <div className="flex gap-2 mt-3">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 bg-gradient-to-br ${getAvatarColor(
+                  user.id,
+                )} shadow-md text-xs`}
+              >
+                {getInitials(user.name)}
+              </div>
+              <div className="flex-1 bg-gray-100 rounded-2xl px-4 py-2">
+                <Textarea
+                  placeholder={`Reply to ${comment.user?.name || "user"}...`}
+                  value={replyTexts[comment.id] || ""}
+                  onChange={(e: any) =>
+                    setReplyTexts({
+                      ...replyTexts,
+                      [comment.id]: e.target.value,
+                    })
+                  }
+                  className="min-h-[60px] text-sm bg-transparent border-0 p-0 focus:ring-0"
+                  autoFocus
+                  onKeyDown={(e: any) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (replyTexts[comment.id]?.trim()) {
+                        onReply(comment.id);
+                      }
+                    }
+                  }}
+                />
+                <div className="flex gap-2 mt-2 justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => onReply(comment.id)}
+                    disabled={
+                      !replyTexts[comment.id]?.trim() ||
+                      isPostingReply === comment.id
+                    }
+                    className="text-xs h-7"
+                  >
+                    {isPostingReply === comment.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Posting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-3 w-3 mr-1" />
+                        Reply
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowReplyInput(null);
+                      setReplyTexts({ ...replyTexts, [comment.id]: "" });
+                    }}
+                    disabled={isPostingReply === comment.id}
+                    className="text-xs h-7"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Show/Hide Replies Button (Facebook-style) */}
+          {replyCount > 0 && (
+            <button
+              onClick={() => {
+                if (
+                  !showReplies &&
+                  (!comment.replies || comment.replies.length === 0)
+                ) {
+                  onLoadReplies(comment.id);
+                }
+                setShowReplies(!showReplies);
+              }}
+              className="flex items-center gap-2 mt-2 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-full text-xs font-semibold transition"
+              disabled={isLoadingRepliesThis}
+            >
+              {isLoadingRepliesThis ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading replies...
+                </>
+              ) : showReplies ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  Hide {replyCount} {replyCount === 1 ? "reply" : "replies"}
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  View {replyCount} {replyCount === 1 ? "reply" : "replies"}
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Nested Replies */}
+          {showReplies && comment.replies && comment.replies.length > 0 && (
+            <div className="mt-2">
+              {comment.replies.map((reply: CommentWithEngagement) => (
+                <CommentItem
+                  key={reply.id}
+                  comment={reply}
+                  depth={depth + 1}
+                  user={user}
+                  token={token}
+                  onReply={onReply}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onLike={onLike}
+                  isDeleting={isDeleting}
+                  isPostingReply={isPostingReply}
+                  editingComment={editingComment}
+                  editText={editText}
+                  setEditText={setEditText}
+                  isUpdating={isUpdating}
+                  cancelEdit={cancelEdit}
+                  showReplyInput={showReplyInput}
+                  replyTexts={replyTexts}
+                  setReplyTexts={setReplyTexts}
+                  setShowReplyInput={setShowReplyInput}
+                  onLoadReplies={onLoadReplies}
+                  isLoadingReplies={isLoadingReplies}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -157,8 +561,8 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
   // Delete state
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
 
-  // Dropdown state
-  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+  // Load replies state
+  const [isLoadingReplies, setIsLoadingReplies] = useState<number | null>(null);
 
   const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
@@ -186,7 +590,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     }
   }, [article.id, token]);
 
-  const checkUserLikeStatus = async () => {
+  const checkUserLikeStatus = useCallback(async () => {
     if (!token) return;
 
     try {
@@ -202,9 +606,9 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     } catch (error) {
       console.error("Error checking like status:", error);
     }
-  };
+  }, [article.id, token, user?.id]);
 
-  const checkUserBookmarkStatus = async () => {
+  const checkUserBookmarkStatus = useCallback(async () => {
     if (!token) return;
 
     try {
@@ -222,9 +626,8 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     } catch (error) {
       console.error("Error checking bookmark status:", error);
     }
-  };
+  }, [article.id, token]);
 
-  // Article like functionality
   const toggleArticleLike = async () => {
     if (!user) {
       alert("Please login to like articles");
@@ -271,7 +674,6 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     }
   };
 
-  // Article bookmark functionality
   const toggleBookmark = async () => {
     if (!user) {
       alert("Please login to bookmark articles");
@@ -311,7 +713,6 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     }
   };
 
-  // Share article functionality
   const shareArticle = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -322,7 +723,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     }
   };
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     try {
       setIsLoadingComments(true);
       const headers: any = {};
@@ -342,31 +743,75 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     } finally {
       setIsLoadingComments(false);
     }
+  }, [article.id, token]);
+
+  const loadReplies = async (commentId: number) => {
+    try {
+      setIsLoadingReplies(commentId);
+      const headers: any = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(`${API}/comments/${commentId}/replies`, {
+        headers,
+      });
+
+      if (!res.ok) throw new Error("Failed to load replies");
+
+      const data = await res.json();
+
+      // Update the comment with loaded replies
+      setComments((prev) => updateCommentReplies(prev, commentId, data));
+    } catch (error) {
+      console.error("Error loading replies:", error);
+      alert("Failed to load replies. Please try again.");
+    } finally {
+      setIsLoadingReplies(null);
+    }
+  };
+
+  const updateCommentReplies = (
+    comments: CommentWithEngagement[],
+    commentId: number,
+    replies: any[],
+  ): CommentWithEngagement[] => {
+    return comments.map((comment) => {
+      if (comment.id === commentId) {
+        return {
+          ...comment,
+          replies: organizeComments(replies),
+        };
+      }
+      if (comment.replies && comment.replies.length > 0) {
+        return {
+          ...comment,
+          replies: updateCommentReplies(comment.replies, commentId, replies),
+        };
+      }
+      return comment;
+    });
   };
 
   const organizeComments = (flatComments: any[]): CommentWithEngagement[] => {
     const commentMap: { [key: number]: CommentWithEngagement } = {};
     const rootComments: CommentWithEngagement[] = [];
 
-    // First pass: create all comments with proper structure
     flatComments.forEach((comment: any) => {
       commentMap[comment.id] = {
         ...comment,
-        replies: [],
+        replies: comment.replies || [],
         likes_count: comment.likes_count || 0,
         is_liked: comment.is_liked || false,
         user: comment.user || {
           id: comment.user_id,
-          name: article.author?.name,
+          name: "Anonymous",
           email: "",
-          role: "READER",
+          role: "READER" as UserRole,
           created_at: "",
           updated_at: "",
         },
       };
     });
 
-    // Second pass: organize into tree structure
     flatComments.forEach((comment: any) => {
       if (comment.parent_id === null || comment.parent_id === undefined) {
         rootComments.push(commentMap[comment.id]);
@@ -389,8 +834,27 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
 
     if (!commentText.trim()) return;
 
+    const optimisticComment: CommentWithEngagement = {
+      id: Date.now(),
+      article_id: article.id,
+      user_id: user.id,
+      content: commentText,
+      status: "APPROVED",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      likes_count: 0,
+      is_liked: false,
+      user: user,
+      replies: [],
+    };
+
     try {
       setIsPostingComment(true);
+
+      // Optimistic update
+      setComments((prev) => [optimisticComment, ...prev]);
+      setCommentText("");
+
       const res = await fetch(`${API}/comments`, {
         method: "POST",
         headers: {
@@ -408,11 +872,13 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         throw new Error(errorData.message || "Failed to post comment");
       }
 
-      setCommentText("");
-      await loadComments(); // Refresh comments
+      await loadComments();
     } catch (error: any) {
       console.error("Error posting comment:", error);
       alert(error.message || "Failed to post comment. Please try again.");
+
+      setComments((prev) => prev.filter((c) => c.id !== optimisticComment.id));
+      setCommentText(commentText);
     } finally {
       setIsPostingComment(false);
     }
@@ -427,8 +893,29 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     const replyText = replyTexts[parentId];
     if (!replyText?.trim()) return;
 
+    const optimisticReply: CommentWithEngagement = {
+      id: Date.now(),
+      article_id: article.id,
+      user_id: user.id,
+      parent_id: parentId,
+      content: replyText,
+      status: "APPROVED",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      likes_count: 0,
+      is_liked: false,
+      user: user,
+      replies: [],
+    };
+
     try {
       setIsPostingReply(parentId);
+
+      // Optimistic update
+      setComments((prev) => addReplyToTree(prev, parentId, optimisticReply));
+      setReplyTexts({ ...replyTexts, [parentId]: "" });
+      setShowReplyInput(null);
+
       const res = await fetch(`${API}/comments`, {
         method: "POST",
         headers: {
@@ -447,22 +934,77 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         throw new Error(errorData.message || "Failed to post reply");
       }
 
-      setReplyTexts({ ...replyTexts, [parentId]: "" });
-      setShowReplyInput(null);
-      await loadComments(); // Refresh comments
+      await loadComments();
     } catch (error: any) {
       console.error("Error posting reply:", error);
       alert(error.message || "Failed to post reply. Please try again.");
+
+      setComments((prev) => removeReplyFromTree(prev, optimisticReply.id));
+      setReplyTexts({ ...replyTexts, [parentId]: replyText });
+      setShowReplyInput(parentId);
     } finally {
       setIsPostingReply(null);
     }
   };
 
+  const addReplyToTree = (
+    comments: CommentWithEngagement[],
+    parentId: number,
+    newReply: CommentWithEngagement,
+  ): CommentWithEngagement[] => {
+    return comments.map((comment) => {
+      if (comment.id === parentId) {
+        return {
+          ...comment,
+          replies: [...(comment.replies || []), newReply],
+        };
+      }
+      if (comment.replies && comment.replies.length > 0) {
+        return {
+          ...comment,
+          replies: addReplyToTree(comment.replies, parentId, newReply),
+        };
+      }
+      return comment;
+    });
+  };
+
+  const removeReplyFromTree = (
+    comments: CommentWithEngagement[],
+    replyId: number,
+  ): CommentWithEngagement[] => {
+    return comments
+      .map((comment) => {
+        if (comment.replies && comment.replies.length > 0) {
+          return {
+            ...comment,
+            replies: removeReplyFromTree(comment.replies, replyId),
+          };
+        }
+        return comment;
+      })
+      .filter((comment) => comment.id !== replyId);
+  };
+
+  const startEdit = (commentId: number, content: string) => {
+    setEditingComment(commentId);
+    setEditText(content);
+  };
+
   const updateComment = async (commentId: number) => {
     if (!user || !editText.trim()) return;
 
+    const previousComments = comments;
+    const previousEditText = editText;
+
     try {
       setIsUpdating(true);
+
+      // Optimistic update
+      setComments((prev) => updateCommentInTree(prev, commentId, editText));
+      setEditingComment(null);
+      setEditText("");
+
       const res = await fetch(`${API}/comments/${commentId}`, {
         method: "PUT",
         headers: {
@@ -476,25 +1018,52 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         const errorData = await res.json();
         throw new Error(errorData.message || "Failed to update comment");
       }
-
-      setEditingComment(null);
-      setEditText("");
-      await loadComments(); // Refresh comments
     } catch (error: any) {
       console.error("Error updating comment:", error);
       alert(error.message || "Failed to update comment. Please try again.");
+
+      setComments(previousComments);
+      setEditText(previousEditText);
+      setEditingComment(commentId);
     } finally {
       setIsUpdating(false);
     }
   };
 
+  const updateCommentInTree = (
+    comments: CommentWithEngagement[],
+    commentId: number,
+    newContent: string,
+  ): CommentWithEngagement[] => {
+    return comments.map((comment) => {
+      if (comment.id === commentId) {
+        return {
+          ...comment,
+          content: newContent,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      if (comment.replies && comment.replies.length > 0) {
+        return {
+          ...comment,
+          replies: updateCommentInTree(comment.replies, commentId, newContent),
+        };
+      }
+      return comment;
+    });
+  };
+
   const deleteComment = async (commentId: number) => {
     if (!user) return;
 
-    if (!confirm("Are you sure you want to delete this comment?")) return;
+    const previousComments = comments;
 
     try {
       setIsDeleting(commentId);
+
+      // Optimistic update
+      setComments((prev) => removeCommentFromTree(prev, commentId));
+
       const res = await fetch(`${API}/comments/${commentId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -504,23 +1073,16 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         const errorData = await res.json();
         throw new Error(errorData.message || "Failed to delete comment");
       }
-
-      setOpenDropdown(null);
-
-      // Optimistically remove comment from UI
-      setComments((prev) => removeCommentFromTree(prev, commentId));
     } catch (error: any) {
       console.error("Error deleting comment:", error);
       alert(error.message || "Failed to delete comment. Please try again.");
 
-      // If error, refresh comments to get correct state
-      await loadComments();
+      setComments(previousComments);
     } finally {
       setIsDeleting(null);
     }
   };
 
-  // Helper function to remove comment from tree
   const removeCommentFromTree = (
     comments: CommentWithEngagement[],
     commentId: number,
@@ -529,11 +1091,9 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       if (comment.id === commentId) {
         return false;
       }
-
       if (comment.replies && comment.replies.length > 0) {
         comment.replies = removeCommentFromTree(comment.replies, commentId);
       }
-
       return true;
     });
   };
@@ -545,6 +1105,9 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     }
 
     try {
+      // Optimistic update
+      setComments((prev) => updateCommentLike(prev, commentId, !isLiked));
+
       const method = isLiked ? "DELETE" : "POST";
       const res = await fetch(`${API}/comments/${commentId}/like`, {
         method,
@@ -555,16 +1118,15 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
         const errorData = await res.json();
         throw new Error(errorData.message || "Failed to toggle comment like");
       }
-
-      // Optimistically update UI
-      setComments((prev) => updateCommentLike(prev, commentId, !isLiked));
     } catch (error: any) {
       console.error("Error toggling comment like:", error);
       alert(error.message || "Failed to update like. Please try again.");
+
+      // Revert on error
+      setComments((prev) => updateCommentLike(prev, commentId, isLiked));
     }
   };
 
-  // Helper function to update comment like status
   const updateCommentLike = (
     comments: CommentWithEngagement[],
     commentId: number,
@@ -577,25 +1139,17 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
           is_liked: isLiked,
           likes_count: isLiked
             ? comment.likes_count + 1
-            : comment.likes_count - 1,
+            : Math.max(0, comment.likes_count - 1),
         };
       }
-
       if (comment.replies && comment.replies.length > 0) {
         return {
           ...comment,
           replies: updateCommentLike(comment.replies, commentId, isLiked),
         };
       }
-
       return comment;
     });
-  };
-
-  const startEdit = (comment: Comment) => {
-    setEditingComment(comment.id);
-    setEditText(comment.content);
-    setOpenDropdown(null);
   };
 
   const cancelEdit = () => {
@@ -603,267 +1157,13 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     setEditText("");
   };
 
-  const shareConfig = {
-    url: window.location.href,
-    title: article.title,
-    description: article.content.substring(0, 100) + "...",
-    hashtags: article.category?.name || "NewsHub",
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (diffInSeconds < 60) return "Just now";
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400)
-      return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    if (diffInSeconds < 604800)
-      return `${Math.floor(diffInSeconds / 86400)}d ago`;
-
-    return date.toLocaleDateString();
-  };
-
-  const CommentItem = ({
-    comment,
-    depth = 0,
-  }: {
-    comment: CommentWithEngagement;
-    depth?: number;
-  }) => {
-    const isOwner = user?.id === comment.user_id;
-    const isEditing = editingComment === comment.id;
-    const showingReply = showReplyInput === comment.id;
-    const isDropdownOpen = openDropdown === comment.id;
-    const isDeletingThis = isDeleting === comment.id;
-
-    return (
-      <div
-        className={`${
-          depth > 0 ? "ml-8 mt-4 border-l-2 border-gray-200 pl-4" : "mt-4"
-        }`}
-      >
-        <div className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3 flex-1">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-                {comment.user?.name?.charAt(0).toUpperCase() || "?"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-gray-900">
-                    {comment.user?.name || "Anonymous"}
-                  </p>
-                  <span className="text-xs text-gray-500">
-                    {formatDate(comment.created_at)}
-                  </span>
-                  {comment.updated_at !== comment.created_at && (
-                    <span className="text-xs text-gray-400 italic">
-                      (edited)
-                    </span>
-                  )}
-                </div>
-
-                {isEditing ? (
-                  <div className="mt-2">
-                    <Textarea
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      className="min-h-[80px]"
-                      placeholder="Edit your comment..."
-                    />
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateComment(comment.id)}
-                        disabled={isUpdating || !editText.trim()}
-                      >
-                        {isUpdating ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          "Save"
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={cancelEdit}
-                        disabled={isUpdating}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-gray-700 mt-1 break-words">
-                    {comment.content}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {isOwner && !isEditing && (
-              <div className="relative">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() =>
-                    setOpenDropdown(isDropdownOpen ? null : comment.id)
-                  }
-                  disabled={isDeletingThis}
-                >
-                  {isDeletingThis ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <MoreVertical className="h-4 w-4" />
-                  )}
-                </Button>
-
-                {isDropdownOpen && !isDeletingThis && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setOpenDropdown(null)}
-                    />
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                      <button
-                        onClick={() => startEdit(comment)}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-700"
-                      >
-                        <Edit2 className="h-4 w-4 mr-2" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteComment(comment.id)}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {!isEditing && !isDeletingThis && (
-            <div className="flex items-center gap-4 mt-3 text-sm">
-              <button
-                onClick={() => toggleCommentLike(comment.id, comment.is_liked)}
-                className={`flex items-center gap-1 hover:text-blue-600 transition ${
-                  comment.is_liked
-                    ? "text-blue-600 font-semibold"
-                    : "text-gray-600"
-                }`}
-                disabled={!user}
-              >
-                <ThumbsUp
-                  className={`h-4 w-4 ${
-                    comment.is_liked ? "fill-current" : ""
-                  }`}
-                />
-                <span>{comment.likes_count || 0}</span>
-              </button>
-
-              <button
-                onClick={() =>
-                  setShowReplyInput(showingReply ? null : comment.id)
-                }
-                className="flex items-center gap-1 text-gray-600 hover:text-blue-600 transition"
-                disabled={!user}
-              >
-                <Reply className="h-4 w-4" />
-                Reply
-              </button>
-
-              {comment.replies && comment.replies.length > 0 && (
-                <span className="text-gray-500">
-                  {comment.replies.length}{" "}
-                  {comment.replies.length === 1 ? "reply" : "replies"}
-                </span>
-              )}
-            </div>
-          )}
-
-          {isDeletingThis && (
-            <div className="mt-3 text-sm text-gray-500">
-              Deleting comment...
-            </div>
-          )}
-        </div>
-
-        {showingReply && user && (
-          <div className="ml-8 mt-3 bg-white rounded-lg border border-gray-200 p-3">
-            <div className="flex gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 text-sm">
-                {user.name?.charAt(0).toUpperCase() || "?"}
-              </div>
-              <div className="flex-1">
-                <Textarea
-                  placeholder={`Reply to ${comment.user?.name || "user"}...`}
-                  value={replyTexts[comment.id] || ""}
-                  onChange={(e: any) =>
-                    setReplyTexts({
-                      ...replyTexts,
-                      [comment.id]: e.target.value,
-                    })
-                  }
-                  className="min-h-[60px] mb-2"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => postReply(comment.id)}
-                    disabled={
-                      !replyTexts[comment.id]?.trim() ||
-                      isPostingReply === comment.id
-                    }
-                  >
-                    {isPostingReply === comment.id ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Posting...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4 mr-1" />
-                        Reply
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setShowReplyInput(null);
-                      setReplyTexts({ ...replyTexts, [comment.id]: "" });
-                    }}
-                    disabled={isPostingReply === comment.id}
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {comment.replies && comment.replies.length > 0 && (
-          <div className="mt-2">
-            {comment.replies.map((reply) => (
-              <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
-            ))}
-          </div>
-        )}
-      </div>
-    );
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
   };
 
   const totalComments = (comments: CommentWithEngagement[]): number => {
@@ -876,185 +1176,241 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     return count;
   };
 
+  const getInitials = (name: string) => {
+    return name?.charAt(0).toUpperCase() || "A";
+  };
+
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4">
-      {/* Article Card */}
-      <article className="bg-white rounded-xl shadow-sm overflow-hidden mb-8">
-        {article.thumbnail && (
-          <img
-            src={
-              article.thumbnail.startsWith("http")
-                ? article.thumbnail
-                : `${API?.replace("/api", "")}/storage/${article.thumbnail}`
-            }
-            alt={article.title}
-            className="w-full h-auto object-cover max-h-96"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = "/placeholder.svg";
-            }}
-          />
-        )}
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <div className="max-w-4xl mx-auto py-8 px-4">
+        {/* Article Card */}
+        <article className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8 border border-gray-200">
+          {article.thumbnail && (
+            <div className="relative h-96 overflow-hidden">
+              <img
+                src={
+                  article.thumbnail.startsWith("http")
+                    ? article.thumbnail
+                    : `${API?.replace("/api", "")}/storage/${article.thumbnail}`
+                }
+                alt={article.title}
+                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    "https://images.unsplash.com/photo-1588681664899-f142ff2dc9b1?q=80&w=2070";
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+            </div>
+          )}
 
-        <div className="p-8">
-          <h1 className="text-4xl font-bold mb-4 text-gray-900">
-            {article.title}
-          </h1>
-
-          <div className="flex items-center gap-4 mb-6 text-sm text-gray-600 flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                {article.author?.name?.charAt(0).toUpperCase() || "A"}
-              </div>
-              <span className="font-medium">
-                {article.author?.name || "Anonymous"}
+          <div className="p-8">
+            <div className="mb-6">
+              <span className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 font-semibold text-sm">
+                <Tag className="h-4 w-4 mr-2" />
+                {article.category?.name || "Uncategorized"}
               </span>
             </div>
-            <span>•</span>
-            <span>{formatDate(article.created_at)}</span>
-            {article.category && (
-              <>
-                <span>•</span>
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
-                  {article.category.name}
-                </span>
-              </>
-            )}
-          </div>
 
-          <div className="prose max-w-none mb-8">
-            <p className="text-gray-700 text-lg leading-relaxed whitespace-pre-wrap">
-              {article.content}
-            </p>
-          </div>
+            <h1 className="text-5xl font-bold mb-6 text-gray-900 leading-tight">
+              {article.title}
+            </h1>
 
-          {/* Article Engagement Buttons */}
-          <div className="flex items-center gap-4 py-4 border-y border-gray-200">
-            {/* Like Button */}
-            <button
-              onClick={toggleArticleLike}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-                liked
-                  ? "bg-red-50 text-red-600 hover:bg-red-100"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              } ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
-              disabled={!user || isLiking}
-              aria-label={liked ? "Unlike article" : "Like article"}
-            >
-              {isLiking ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
-              )}
-              <span className="font-semibold">{likes}</span>
-            </button>
-
-            {/* Comment Button */}
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-              <MessageCircle className="h-5 w-5" />
-              <span className="font-semibold">{totalComments(comments)}</span>
-            </button>
-
-            {/* Bookmark Button */}
-            <button
-              onClick={toggleBookmark}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-                bookmarked
-                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              } ${isBookmarking ? "opacity-50 cursor-not-allowed" : ""}`}
-              disabled={!user || isBookmarking}
-              aria-label={bookmarked ? "Remove bookmark" : "Bookmark article"}
-            >
-              {isBookmarking ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Bookmark
-                  className={`h-5 w-5 ${bookmarked ? "fill-current" : ""}`}
-                />
-              )}
-              <span className="font-medium">Bookmark</span>
-            </button>
-            <SocialShare
-              config={shareConfig}
-              variant="button" // or "icon" if you want the icon variant
-            />
-          </div>
-        </div>
-      </article>
-
-      {/* Comments Section */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-2xl font-bold mb-6 text-gray-900">
-          Comments ({totalComments(comments)})
-        </h3>
-
-        {user ? (
-          <div className="mb-8">
-            <div className="flex gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-                {user.name?.charAt(0).toUpperCase() || "?"}
+            <div className="flex flex-wrap items-center gap-6 mb-8 text-gray-600">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                  {getInitials(article.author?.name || "")}
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900">
+                    {article.author?.name || "Anonymous"}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4" />
+                    <span>{formatDate(article.created_at)}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1">
-                <Textarea
-                  placeholder="Write a comment..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  className="min-h-[100px] mb-3"
-                />
-                <Button
-                  onClick={postComment}
-                  disabled={!commentText.trim() || isPostingComment}
-                >
-                  {isPostingComment ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Posting...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Post Comment
-                    </>
+            </div>
+
+            <div className="prose prose-lg max-w-none mb-10">
+              <div className="text-gray-700 text-lg leading-relaxed whitespace-pre-wrap bg-gray-50 p-6 rounded-xl">
+                {article.content}
+              </div>
+            </div>
+
+            {/* Article Engagement Buttons */}
+            <div className="flex flex-wrap items-center gap-4 py-6 border-t border-gray-200">
+              <button
+                onClick={toggleArticleLike}
+                className={`flex items-center gap-3 px-1 py-1 rounded-full transition-all duration-300 ${
+                  liked
+                    ? "bg-gradient-to-r from-red-50 to-pink-50 text-red-600 border border-red-200"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                } ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
+                disabled={!user || isLiking}
+              >
+                {isLiking ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+                )}
+                <span className="font-bold">{likes}</span>
+                <span>{liked ? "Liked" : "Like"}</span>
+              </button>
+              <button className="flex items-center gap-3 px-1 py-1 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+                <MessageCircle className="h-5 w-5" />
+                <span className="font-bold">{totalComments(comments)}</span>
+                <span>Comments</span>
+              </button>
+              <button
+                onClick={toggleBookmark}
+                className={`flex items-center gap-3  py-1 px-1 rounded-full transition ${
+                  bookmarked
+                    ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-600 border border-blue-200"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                } ${isBookmarking ? "opacity-50 cursor-not-allowed" : ""}`}
+                disabled={!user || isBookmarking}
+              >
+                {isBookmarking ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Bookmark
+                    className={`h-5 w-5 ${bookmarked ? "fill-current" : ""}`}
+                  />
+                )}
+                <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
+              </button>
+              <SocialShare
+                config={{
+                  url: window.location.href,
+                  title: article.title,
+                  description: article.content.substring(0, 160),
+                }}
+              />
+            </div>
+          </div>
+        </article>
+
+        {/* Comments Section (Facebook-style) */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-2xl font-bold text-gray-900">Comments</h3>
+            <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-full font-semibold text-sm">
+              {totalComments(comments)}
+            </div>
+          </div>
+
+          {user ? (
+            <div className="mb-8">
+              <div className="flex gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 shadow-md">
+                  {getInitials(user.name)}
+                </div>
+                <div className="flex-1 bg-gray-100 rounded-3xl px-4 py-3">
+                  <Textarea
+                    placeholder="Write a comment..."
+                    value={commentText}
+                    onChange={(e: any) => setCommentText(e.target.value)}
+                    className="min-h-[60px] bg-transparent border-0 p-0 focus:ring-0 text-sm"
+                    onKeyDown={(e: any) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (commentText.trim()) {
+                          postComment();
+                        }
+                      }
+                    }}
+                  />
+                  {commentText.trim() && (
+                    <div className="flex justify-end mt-2">
+                      <Button
+                        onClick={postComment}
+                        disabled={!commentText.trim() || isPostingComment}
+                        size="sm"
+                        className="text-xs h-7"
+                      >
+                        {isPostingComment ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Posting...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-3 w-3 mr-1" />
+                            Post
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
-                </Button>
+                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg text-center border border-blue-100">
-            <MessageCircle className="h-12 w-12 mx-auto mb-3 text-blue-600" />
-            <p className="text-blue-900 font-semibold mb-2">
-              Join the conversation
-            </p>
-            <p className="text-blue-700 text-sm">
-              Please login to leave a comment and engage with others
-            </p>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          {isLoadingComments ? (
-            <div className="text-center py-12">
-              <Loader2 className="h-12 w-12 mx-auto animate-spin text-gray-400" />
-              <p className="mt-4 text-gray-500 font-medium">
-                Loading comments...
-              </p>
-            </div>
-          ) : comments.length === 0 ? (
-            <div className="text-center py-12">
-              <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-500 text-lg font-medium mb-2">
-                No comments yet
-              </p>
-              <p className="text-gray-400">
-                Be the first to share your thoughts!
-              </p>
             </div>
           ) : (
-            comments.map((comment) => (
-              <CommentItem key={comment.id} comment={comment} />
-            ))
+            <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl text-center border border-blue-200">
+              <User className="h-12 w-12 mx-auto mb-3 text-blue-600" />
+              <p className="text-lg font-semibold text-blue-900 mb-2">
+                Join the conversation
+              </p>
+              <p className="text-blue-700 mb-4 text-sm">
+                Sign in to share your thoughts
+              </p>
+              <Button
+                onClick={() => alert("Please implement login functionality")}
+                size="sm"
+              >
+                Sign In
+              </Button>
+            </div>
           )}
+
+          <div>
+            {isLoadingComments ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-12 w-12 mx-auto animate-spin text-blue-600" />
+                <p className="mt-4 text-gray-600 font-medium">
+                  Loading comments...
+                </p>
+              </div>
+            ) : comments.length === 0 ? (
+              <div className="text-center py-12">
+                <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-gray-500 text-xl font-semibold mb-2">
+                  No comments yet
+                </p>
+                <p className="text-gray-400">Be the first to comment!</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {comments.map((comment) => (
+                  <CommentItem
+                    key={comment.id}
+                    comment={comment}
+                    user={user}
+                    token={token}
+                    onReply={postReply}
+                    onEdit={startEdit}
+                    onDelete={deleteComment}
+                    onLike={toggleCommentLike}
+                    isDeleting={isDeleting}
+                    isPostingReply={isPostingReply}
+                    editingComment={editingComment}
+                    editText={editText}
+                    setEditText={setEditText}
+                    isUpdating={isUpdating}
+                    cancelEdit={cancelEdit}
+                    showReplyInput={showReplyInput}
+                    replyTexts={replyTexts}
+                    setReplyTexts={setReplyTexts}
+                    setShowReplyInput={setShowReplyInput}
+                    onLoadReplies={loadReplies}
+                    isLoadingReplies={isLoadingReplies}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

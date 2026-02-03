@@ -91,15 +91,6 @@ export default function Home() {
         {featuredArticles.length > 0 && (
           <CardSwapHero articles={featuredArticles} />
         )}
-
-        <div className="mb-12">
-          <SearchBox
-            value={searchQuery}
-            onChange={(e: any) => setSearchQuery(e.target.value)}
-            placeholder="Search..."
-            className="w-full  px-4 py-2 rounded"
-          />
-        </div>
         <div>
           <InfiniteAutoScroll />
         </div>

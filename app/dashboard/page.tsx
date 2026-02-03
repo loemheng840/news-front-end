@@ -564,7 +564,6 @@ export default function AdminDashboardPage() {
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="w-[300px]">Article</TableHead>
-                      <TableHead>Author</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-center">Likes</TableHead>
@@ -587,14 +586,6 @@ export default function AdminDashboardPage() {
                             >
                               {article.title}
                             </Link>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <User className="h-3 w-3" />
-                              <span>{article.author?.name || "Unknown"}</span>
-                            </div>
                           </div>
                         </TableCell>
                         <TableCell>

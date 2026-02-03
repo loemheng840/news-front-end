@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Navbar } from "@/components/navbar"
-import { Search } from "lucide-react"
-import { HelpContent } from "@/components/help-content"
+import { useState } from "react";
+import { Navbar } from "@/components/navbar";
+import { Search } from "lucide-react";
+import { HelpContent } from "@/components/help-content";
 
 const faqs = [
   {
@@ -74,15 +74,17 @@ const faqs = [
       },
     ],
   },
-]
+];
 
 export default function HelpPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [expandedItems, setExpandedItems] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   const toggleExpand = (id: string) => {
-    setExpandedItems((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
-  }
+    setExpandedItems((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  };
 
   const filteredFaqs = faqs
     .map((category) => ({
@@ -93,17 +95,19 @@ export default function HelpPage() {
           item.a.toLowerCase().includes(searchQuery.toLowerCase()),
       ),
     }))
-    .filter((category) => category.items.length > 0)
+    .filter((category) => category.items.length > 0);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen  text-foreground">
       <Navbar />
 
       {/* Hero Section */}
       <section className="bg-primary text-primary-foreground py-16 md:py-20">
         <div className="container mx-auto px-4">
           <h1 className="font-serif text-5xl font-bold mb-4">Help Center</h1>
-          <p className="text-lg opacity-90 mb-8">Find answers to common questions about NewsHub</p>
+          <p className="text-lg opacity-90 mb-8">
+            Find answers to common questions about NewsHub
+          </p>
 
           <div className="max-w-2xl">
             <div className="relative">
@@ -124,7 +128,7 @@ export default function HelpPage() {
                 <h2 className="text-2xl font-bold mb-4">{category.category}</h2>
                 <div className="space-y-3">
                   {category.items.map((item, index) => {
-                    const id = `${category.category}-${index}`
+                    const id = `${category.category}-${index}`;
                     return (
                       <div key={id} className="border rounded-lg">
                         <button
@@ -137,7 +141,7 @@ export default function HelpPage() {
                           <div className="px-4 py-3 bg-muted">{item.a}</div>
                         )}
                       </div>
-                    )
+                    );
                   })}
                 </div>
               </div>
@@ -146,5 +150,5 @@ export default function HelpPage() {
         </div>
       </section>
     </div>
-  )
+  );
 }
