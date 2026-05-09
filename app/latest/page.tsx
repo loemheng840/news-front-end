@@ -1,32 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Navbar } from "@/components/navbar";
 import { ArticleCard } from "@/components/article-card";
-import type { Article } from "@/lib/types";
+import { useGetLatestArticlesQuery } from "@/lib/redux/news-api";
 
 export default function LatestPage() {
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchLatest() {
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/articles/latest`,
-          { cache: "no-store" }
-        );
-        const json = await res.json();
-        setArticles(json.data || []);
-      } catch (e) {
-        console.error("Failed to load latest articles", e);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchLatest();
-  }, []);
+  const { data, isLoading } = useGetLatestArticlesQuery();
+  const articles = data?.data ?? [];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -42,9 +22,9 @@ export default function LatestPage() {
           </p>
         </div>
 
-        {loading && <p>Loading...</p>}
+        {isLoading && <p>Loading...</p>}
 
-        {!loading && articles.length === 0 && (
+        {!isLoading && articles.length === 0 && (
           <p className="text-red-500">No published articles yet.</p>
         )}
 

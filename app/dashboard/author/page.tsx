@@ -61,13 +61,14 @@ import {
 import Link from "next/link";
 import { format } from "date-fns";
 import { redirect } from "next/navigation";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import {
+  useDeleteArticleMutation,
+  useGetEditorArticlesQuery,
+  useUpdateArticleMutation,
+} from "@/lib/redux/news-api";
 
 export default function AuthDashboardPage() {
-  const { user, isLoading, token } = useAuth();
-  const [articles, setArticles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, isLoading } = useAuth();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<any>(null);
@@ -79,11 +80,17 @@ export default function AuthDashboardPage() {
     content: "",
     status: "DRAFT",
   });
-
-  useEffect(() => {
-    if (!user) return;
-    loadArticles();
-  }, [user]);
+  const {
+    data: articles = [],
+    isLoading: loading,
+    refetch: refetchArticles,
+  } = useGetEditorArticlesQuery(undefined, {
+    skip: !user || (user.role !== "ADMIN" && user.role !== "AUTHOR"),
+  });
+  const [updateArticleMutation] = useUpdateArticleMutation();
+  const [deleteArticleMutation] = useDeleteArticleMutation();
+  const getViewCount = (views: any) =>
+    typeof views === "number" ? views : Array.isArray(views) ? views.length : 0;
 
   useEffect(() => {
     if (error || success) {
@@ -94,27 +101,6 @@ export default function AuthDashboardPage() {
       return () => clearTimeout(timer);
     }
   }, [error, success]);
-
-  const loadArticles = async () => {
-    try {
-      const res = await fetch(`${API}/articles/admin`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) throw new Error("Failed to load articles");
-
-      const json = await res.json();
-      setArticles(json.data || json);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load articles");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleEdit = (article: any) => {
     setSelectedArticle(article);
@@ -133,24 +119,16 @@ export default function AuthDashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/articles/${selectedArticle.id}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
+      await updateArticleMutation({
+        id: selectedArticle.id,
+        data: {
+          ...editForm,
+          status: editForm.status as "DRAFT" | "PUBLISHED",
         },
-        body: JSON.stringify(editForm),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update article");
-      }
-
+      }).unwrap();
       setSuccess("Article updated successfully");
       setEditDialogOpen(false);
-      loadArticles();
+      refetchArticles();
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to update article");
@@ -171,22 +149,10 @@ export default function AuthDashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/articles/${selectedArticle.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to delete article");
-      }
-
+      await deleteArticleMutation(selectedArticle.id).unwrap();
       setSuccess("Article deleted successfully");
       setDeleteDialogOpen(false);
-      loadArticles();
+      refetchArticles();
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to delete article");
@@ -196,13 +162,13 @@ export default function AuthDashboardPage() {
   };
 
   if (isLoading || loading) return null;
-  if (!user || user.role !== "ADMIN") redirect("/");
+  if (!user || (user.role !== "ADMIN" && user.role !== "AUTHOR")) redirect("/");
 
   const stats = {
     total: articles.length,
     published: articles.filter((a) => a.status === "PUBLISHED").length,
     drafts: articles.filter((a) => a.status === "DRAFT").length,
-    views: articles.reduce((sum, a) => sum + (a.views || 0), 0),
+    views: articles.reduce((sum, a) => sum + getViewCount(a.views), 0),
   };
 
   const getStatusIcon = (status: string) => {
@@ -288,7 +254,7 @@ export default function AuthDashboardPage() {
                       <TableCell>
                         {article.likes_count ?? article.likes?.length ?? 0}
                       </TableCell>
-                      <TableCell>{article.views ?? 0}</TableCell>
+                      <TableCell>{getViewCount(article.views)}</TableCell>
 
                       <TableCell>
                         {format(new Date(article.created_at), "MMM d, yyyy")}

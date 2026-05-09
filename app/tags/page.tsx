@@ -1,17 +1,12 @@
+"use client";
+
 import { Navbar } from "@/components/navbar";
 import { Hash } from "lucide-react";
 import Link from "next/link";
+import { useGetTagsQuery } from "@/lib/redux/news-api";
 
-async function getTags() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tags`, {
-    cache: "no-store",
-  });
-  const json = await res.json();
-  return json.data || [];
-}
-
-export default async function TagsPage() {
-  const tags = await getTags();
+export default function TagsPage() {
+  const { data: tags = [] } = useGetTagsQuery();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -28,7 +23,7 @@ export default async function TagsPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {tags.map((tag: any) => (
+          {tags.map((tag) => (
             <Link
               key={tag.id}
               href={`/tag/${tag.slug}`}
@@ -37,11 +32,11 @@ export default async function TagsPage() {
               <div className="flex justify-between mb-2">
                 <h3 className="font-semibold capitalize">{tag.name}</h3>
                 <span className="text-xs bg-accent/20 px-2 py-1 rounded-full">
-                  {tag.articles_count || 0}
+                  {(tag as TagWithCount).articles_count || 0}
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                {tag.articles_count || 0} articles
+                {(tag as TagWithCount).articles_count || 0} articles
               </p>
             </Link>
           ))}
@@ -50,3 +45,7 @@ export default async function TagsPage() {
     </div>
   );
 }
+
+type TagWithCount = {
+  articles_count?: number;
+};

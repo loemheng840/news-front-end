@@ -35,7 +35,9 @@ export function TrendingSection({ articles, limit = 5 }: TrendingSectionProps) {
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="outline" className="text-xs">
                     <Eye className="h-3 w-3 mr-1" />
-                    {article.views.toLocaleString()}
+                    {(typeof article.views === "number"
+                      ? article.views
+                      : article.views?.length ?? 0).toLocaleString()}
                   </Badge>
                 </div>
               </div>

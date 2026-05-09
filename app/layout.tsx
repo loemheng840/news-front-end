@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { Footer } from "@/components/footer";
+import { ReduxProvider } from "@/lib/redux/provider";
 import "./globals.css";
 import TextCursor from "@/components/ui/cusor";
 
@@ -58,12 +59,14 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <div className="flex flex-col min-h-screen">
-              <main className="flex-1">{children}</main>
-              <Footer />
-            </div>
-          </AuthProvider>
+          <ReduxProvider>
+            <AuthProvider>
+              <div className="flex flex-col min-h-screen">
+                <main className="flex-1">{children}</main>
+                <Footer />
+              </div>
+            </AuthProvider>
+          </ReduxProvider>
         </ThemeProvider>
         <Analytics />
       </body>

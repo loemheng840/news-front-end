@@ -3,6 +3,11 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { AuthContextType } from "@/lib/types";
 import { User } from "@/lib/types";
+import {
+  useLoginMutation,
+  useLogoutMutation,
+  useRegisterMutation,
+} from "@/lib/redux/news-api";
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -10,6 +15,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loginRequest] = useLoginMutation();
+  const [registerRequest] = useRegisterMutation();
+  const [logoutRequest] = useLogoutMutation();
 
   useEffect(() => {
     const savedToken = localStorage.getItem("token");
@@ -24,49 +32,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!res.ok) return false;
-
-    const json = await res.json();
-    setUser(json.user);
-    setToken(json.token);
-
-    localStorage.setItem("token", json.token);
-    localStorage.setItem("user", JSON.stringify(json.user));
-
-    return true;
+    try {
+      const json = await loginRequest({ email, password }).unwrap();
+      setUser(json.user);
+      setToken(json.token);
+      localStorage.setItem("token", json.token);
+      localStorage.setItem("user", JSON.stringify(json.user));
+      return true;
+    } catch {
+      return false;
+    }
   };
 
-  // ✅ ADD THIS
   const signup = async (name: string, email: string, password: string) => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      await registerRequest({
         name,
         email,
         password,
         password_confirmation: password,
-      }),
-    });
-
-    if (!res.ok) return false;
-
-    const json = await res.json();
-
-    // If later you return token on register, you can store it too
-    // setUser(json.user);
-    // setToken(json.token);
-
-    return true;
+      }).unwrap();
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const logout = async () => {
+    if (token) {
+      try {
+        await logoutRequest().unwrap();
+      } catch (error) {
+        console.error("Logout request failed:", error);
+      }
+    }
+
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);

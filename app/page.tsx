@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { CardSwapHero } from "@/components/card-swap-hero";
@@ -14,54 +14,24 @@ import {
 } from "@/lib/search";
 import { Navbar } from "@/components/navbar";
 import { Article } from "@/lib/types";
+import {
+  useGetArticlesQuery,
+  useGetCategoriesQuery,
+  useGetFeaturedArticlesQuery,
+} from "@/lib/redux/news-api";
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const { data: articleList = [] } = useGetArticlesQuery();
+  const { data: featuredList = [] } = useGetFeaturedArticlesQuery();
+  const { data: categories = [] } = useGetCategoriesQuery();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles`, {
-        headers: { Accept: "application/json" },
-      });
-
-      const json = await res.json();
-
-      // Make sure we always store an array
-      const articleList = Array.isArray(json)
-        ? json
-        : Array.isArray(json.data)
-          ? json.data
-          : Array.isArray(json.articles)
-            ? json.articles
-            : [];
-
-      setArticles(articleList);
-
-      const latestRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/articles/latest`,
-      );
-      const latestJson = await latestRes.json();
-
-      const catRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/categories`,
-      );
-      const catJson = await catRes.json();
-
-      const categoryList = Array.isArray(catJson)
-        ? catJson
-        : Array.isArray(catJson.data)
-          ? catJson.data
-          : Array.isArray(catJson.categories)
-            ? catJson.categories
-            : [];
-
-      setCategories(categoryList);
-    };
-
-    fetchData();
-  }, []);
+  const articles = useMemo(() => {
+    const merged = [...featuredList, ...articleList];
+    const map = new Map<number, Article>();
+    merged.forEach((item) => map.set(item.id, item));
+    return Array.from(map.values());
+  }, [articleList, featuredList]);
 
   const featuredArticles = Array.isArray(articles)
     ? articles.filter((a) => a.status === "PUBLISHED").slice(0, 3)
@@ -91,25 +61,27 @@ export default function Home() {
         {featuredArticles.length > 0 && (
           <CardSwapHero articles={featuredArticles} />
         )}
-        <div>
+        <div className="mt-10">
           <InfiniteAutoScroll />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-3">
           {/* Main */}
-          <div className="lg:col-span-2 space-y-12">
-            <section>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-3xl font-bold">Latest News</h2>
+          <div className="space-y-12 lg:col-span-2">
+            <section className="rounded-xl border bg-card p-5 md:p-6">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
+                  Latest News
+                </h2>
                 <Link
                   href="/latest"
-                  className="flex items-center gap-2 text-accent"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
                 >
                   View All <ChevronRight className="h-4 w-4" />
                 </Link>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {latestArticles.map((article) => (
                   <ArticleCard
                     key={article.id}
@@ -123,16 +95,16 @@ export default function Home() {
 
           {/* Sidebar */}
           <div className="space-y-8">
-            <section className="bg-card rounded-lg border p-6">
-              <h3 className="text-xl font-bold mb-4">Trending</h3>
+            <section className="rounded-xl border bg-card p-6">
+              <h3 className="mb-4 text-xl font-bold">Trending</h3>
               <div className="space-y-4">
                 {trendingArticles.map((article, index) => (
                   <Link
                     key={article.id}
                     href={`/article/${article.slug}`}
-                    className="flex gap-3"
+                    className="flex gap-3 rounded-lg p-2 transition-colors hover:bg-muted/60"
                   >
-                    <span className="text-2xl font-bold text-accent">
+                    <span className="text-2xl font-bold text-primary">
                       {index + 1}
                     </span>
                     <div>
@@ -140,7 +112,10 @@ export default function Home() {
                         {article.title}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {article.views?.length || 0} views
+                        {(typeof article.views === "number"
+                          ? article.views
+                          : article.views?.length || 0)}{" "}
+                        views
                       </p>
                     </div>
                   </Link>
@@ -148,14 +123,14 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="bg-card rounded-lg border p-6">
-              <h3 className="text-xl font-bold mb-4">Browse Categories</h3>
+            <section className="rounded-xl border bg-card p-6">
+              <h3 className="mb-4 text-xl font-bold">Browse Categories</h3>
               <div className="space-y-2">
                 {categories.map((category) => (
                   <Link
                     key={category.id}
                     href={`/category/${category.slug}`}
-                    className="block px-3 py-2 hover:bg-accent/20"
+                    className="block rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
                   >
                     {category.name}
                   </Link>
@@ -163,14 +138,14 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="bg-card rounded-lg border p-6">
-              <h3 className="text-xl font-bold mb-4">Explore Topics</h3>
+            <section className="rounded-xl border bg-card p-6">
+              <h3 className="mb-4 text-xl font-bold">Explore Topics</h3>
               <div className="flex flex-wrap gap-2">
                 {popularTags.map((tag) => (
                   <Link
                     key={tag}
                     href={`/tag/${tag}`}
-                    className="px-3 py-1 bg-primary/10 rounded-full text-sm"
+                    className="rounded-full bg-primary/10 px-3 py-1 text-sm transition-colors hover:bg-primary/20"
                   >
                     #{tag}
                   </Link>

@@ -1,72 +1,76 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { ArticleCard } from "@/components/article-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Filter } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import {
+  useGetArticlesByDateQuery,
+  useGetCategoriesQuery,
+  useGetLatestArticlesQuery,
+  useGetTagsQuery,
+  useGetTagArticlesQuery,
+  useGetCategoryArticlesQuery,
+  useSearchArticlesQuery,
+} from "@/lib/redux/news-api";
 
 function SearchContent() {
   const searchParams = useSearchParams();
   const q = searchParams.get("q") || "";
 
-  const [articles, setArticles] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [tags, setTags] = useState<any[]>([]);
   const [activeCategory, setActiveCategory] = useState("");
   const [activeTag, setActiveTag] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [sort, setSort] = useState<"date" | "views">("date");
-  const [loading, setLoading] = useState(true);
+  const { data: categories = [] } = useGetCategoriesQuery();
+  const { data: tags = [] } = useGetTagsQuery();
+  const latestQuery = useGetLatestArticlesQuery(undefined, {
+    skip: Boolean(q || activeCategory || activeTag || (from && to)),
+  });
+  const searchQuery = useSearchArticlesQuery(
+    { q },
+    { skip: !q || Boolean(activeCategory || activeTag || (from && to)) },
+  );
+  const categoryQuery = useGetCategoryArticlesQuery(activeCategory, {
+    skip: !activeCategory || Boolean(activeTag || (from && to)),
+  });
+  const tagQuery = useGetTagArticlesQuery(activeTag, {
+    skip: !activeTag || Boolean(from && to),
+  });
+  const dateQuery = useGetArticlesByDateQuery(
+    { from, to },
+    { skip: !(from && to) },
+  );
 
-  useEffect(() => {
-    fetch(`${API}/categories`)
-      .then((r) => r.json())
-      .then((j) => setCategories(j.data || j));
-    fetch(`${API}/tags`)
-      .then((r) => r.json())
-      .then((j) => setTags(j.data || j));
-  }, []);
+  const activeQuery = from && to
+    ? dateQuery
+    : activeTag
+      ? tagQuery
+      : activeCategory
+        ? categoryQuery
+        : q
+          ? searchQuery
+          : latestQuery;
 
-  useEffect(() => {
-    loadArticles();
-  }, [q, activeCategory, activeTag, from, to, sort]);
-
-  const loadArticles = async () => {
-    setLoading(true);
-    try {
-      let url = `${API}/articles/latest`;
-
-      if (q) url = `${API}/articles/search?q=${q}`;
-      if (activeCategory) url = `${API}/categories/${activeCategory}/articles`;
-      if (activeTag) url = `${API}/tags/${activeTag}/articles`;
-      if (from && to) url = `${API}/articles/date?from=${from}&to=${to}`;
-
-      const res = await fetch(url);
-      const json = await res.json();
-      let data = json.data || json;
-
-      if (sort === "views") {
-        data = data.sort((a: any, b: any) => (b.views || 0) - (a.views || 0));
-      } else {
-        data = data.sort(
-          (a: any, b: any) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-      }
-
-      setArticles(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+  const articles = useMemo(() => {
+    const rawArticles = activeQuery.data?.data ?? [];
+    const sorted = [...rawArticles];
+    if (sort === "views") {
+      return sorted.sort(
+        (a, b) =>
+          (typeof b.views === "number" ? b.views : b.views?.length ?? 0) -
+          (typeof a.views === "number" ? a.views : a.views?.length ?? 0),
+      );
     }
-  };
+    return sorted.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+  }, [activeQuery.data, sort]);
 
   return (
     <main className="container mx-auto px-4 py-8 flex-1">
@@ -172,7 +176,7 @@ function SearchContent() {
 
         {/* Results */}
         <div className="lg:col-span-3">
-          {loading ? (
+          {activeQuery.isLoading ? (
             <p>Loading...</p>
           ) : articles.length ? (
             <div className="grid gap-6">

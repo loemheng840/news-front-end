@@ -57,6 +57,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import {
+  useCreateArticleMutation,
+  useCreateCategoryMutation,
+  useCreateTagMutation,
+  useGetCategoriesQuery,
+  useGetTagsQuery,
+} from "@/lib/redux/news-api";
 
 export default function NewArticlePage() {
   const { user, token } = useAuth();
@@ -71,9 +78,6 @@ export default function NewArticlePage() {
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [status, setStatus] = useState<"PUBLISHED" | "DRAFT">("DRAFT");
   const [featured, setFeatured] = useState(false);
-
-  const [categories, setCategories] = useState<any[]>([]);
-  const [allTags, setAllTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [characterCount, setCharacterCount] = useState(0);
   const [wordCount, setWordCount] = useState(0);
@@ -86,11 +90,11 @@ export default function NewArticlePage() {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [creatingTag, setCreatingTag] = useState(false);
   const [creatingCategory, setCreatingCategory] = useState(false);
-
-  useEffect(() => {
-    fetchCategories();
-    fetchTags();
-  }, []);
+  const { data: categories = [] } = useGetCategoriesQuery();
+  const { data: allTags = [] } = useGetTagsQuery();
+  const [createTag] = useCreateTagMutation();
+  const [createCategory] = useCreateCategoryMutation();
+  const [createArticle] = useCreateArticleMutation();
 
   useEffect(() => {
     setCharacterCount(content.length);
@@ -101,40 +105,6 @@ export default function NewArticlePage() {
         .filter((word) => word.length > 0).length,
     );
   }, [content]);
-
-  const fetchCategories = async () => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`);
-      const data = await res.json();
-      const categoryList = Array.isArray(data)
-        ? data
-        : Array.isArray(data.data)
-          ? data.data
-          : Array.isArray(data.categories)
-            ? data.categories
-            : [];
-      setCategories(categoryList);
-    } catch (error) {
-      toast.error("Failed to load categories");
-    }
-  };
-
-  const fetchTags = async () => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tags`);
-      const data = await res.json();
-      const tagList = Array.isArray(data)
-        ? data
-        : Array.isArray(data.data)
-          ? data.data
-          : Array.isArray(data.tags)
-            ? data.tags
-            : [];
-      setAllTags(tagList);
-    } catch (error) {
-      toast.error("Failed to load tags");
-    }
-  };
 
   if (!user || user.role === "READER") {
     return (
@@ -152,6 +122,8 @@ export default function NewArticlePage() {
       </div>
     );
   }
+
+  const canManageTaxonomy = user.role === "ADMIN";
 
   const toggleTag = (id: number) => {
     setTags((prev) =>
@@ -181,6 +153,10 @@ export default function NewArticlePage() {
   };
 
   const handleCreateTag = async () => {
+    if (!canManageTaxonomy) {
+      toast.error("Only admins can create tags");
+      return;
+    }
     if (!newTagName.trim()) {
       toast.error("Tag name is required");
       return;
@@ -188,34 +164,23 @@ export default function NewArticlePage() {
 
     setCreatingTag(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tags`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name: newTagName.trim() }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setAllTags((prev) => [...prev, data]);
-        setTags((prev) => [...prev, data.id]);
-        setNewTagName("");
-        setNewTagDialog(false);
-        toast.success(`Tag "${newTagName}" created successfully`);
-      } else {
-        const error = await res.json();
-        toast.error(error.message || "Failed to create tag");
-      }
-    } catch (error) {
-      toast.error("Network error occurred");
+      const createdTag = await createTag({ name: newTagName.trim() }).unwrap();
+      setTags((prev) => [...prev, createdTag.id]);
+      setNewTagName("");
+      setNewTagDialog(false);
+      toast.success(`Tag "${createdTag.name}" created successfully`);
+    } catch (error: any) {
+      toast.error(error?.data?.message || "Failed to create tag");
     } finally {
       setCreatingTag(false);
     }
   };
 
   const handleCreateCategory = async () => {
+    if (!canManageTaxonomy) {
+      toast.error("Only admins can create categories");
+      return;
+    }
     if (!newCategoryName.trim()) {
       toast.error("Category name is required");
       return;
@@ -223,28 +188,15 @@ export default function NewArticlePage() {
 
     setCreatingCategory(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name: newCategoryName.trim() }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setCategories((prev) => [...prev, data]);
-        setCategoryId(data.id.toString());
-        setNewCategoryName("");
-        setNewCategoryDialog(false);
-        toast.success(`Category "${newCategoryName}" created successfully`);
-      } else {
-        const error = await res.json();
-        toast.error(error.message || "Failed to create category");
-      }
-    } catch (error) {
-      toast.error("Network error occurred");
+      const createdCategory = await createCategory({
+        name: newCategoryName.trim(),
+      }).unwrap();
+      setCategoryId(createdCategory.id.toString());
+      setNewCategoryName("");
+      setNewCategoryDialog(false);
+      toast.success(`Category "${createdCategory.name}" created successfully`);
+    } catch (error: any) {
+      toast.error(error?.data?.message || "Failed to create category");
     } finally {
       setCreatingCategory(false);
     }
@@ -259,38 +211,24 @@ export default function NewArticlePage() {
     setLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("title", title.trim());
-      formData.append("excerpt", excerpt.trim());
-      formData.append("content", content.trim());
-      formData.append("category_id", categoryId);
-      formData.append("status", publishStatus);
-      formData.append("featured", featured.toString());
-      if (thumbnail) formData.append("thumbnail", thumbnail);
-      tags.forEach((id) => formData.append("tag_ids[]", id.toString()));
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        toast.success(
-          publishStatus === "PUBLISHED"
-            ? "Article published successfully!"
-            : "Article saved as draft!",
-        );
-        router.push("/dashboard");
-      } else {
-        const error = await res.json();
-        toast.error(error.message || "Failed to create article");
-      }
-    } catch (error) {
-      toast.error("Network error occurred");
+      await createArticle({
+        title: title.trim(),
+        excerpt: excerpt.trim(),
+        content: content.trim(),
+        category_id: Number(categoryId),
+        status: publishStatus,
+        featured,
+        thumbnail,
+        tag_ids: tags,
+      }).unwrap();
+      toast.success(
+        publishStatus === "PUBLISHED"
+          ? "Article published successfully!"
+          : "Article saved as draft!",
+      );
+      router.push("/dashboard");
+    } catch (error: any) {
+      toast.error(error?.data?.message || "Failed to create article");
     } finally {
       setLoading(false);
     }
@@ -548,16 +486,18 @@ export default function NewArticlePage() {
                       <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                         Category <span className="text-red-500">*</span>
                       </Label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setNewCategoryDialog(true)}
-                        className="h-7 text-xs gap-1"
-                      >
-                        <Plus className="h-3 w-3" />
-                        New
-                      </Button>
+                      {canManageTaxonomy && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setNewCategoryDialog(true)}
+                          className="h-7 text-xs gap-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                          New
+                        </Button>
+                      )}
                     </div>
                     <Select
                       value={categoryId}
@@ -596,16 +536,18 @@ export default function NewArticlePage() {
                         >
                           Clear all
                         </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setNewTagDialog(true)}
-                          className="h-7 text-xs gap-1"
-                        >
-                          <Plus className="h-3 w-3" />
-                          New
-                        </Button>
+                        {canManageTaxonomy && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setNewTagDialog(true)}
+                            className="h-7 text-xs gap-1"
+                          >
+                            <Plus className="h-3 w-3" />
+                            New
+                          </Button>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 max-h-48 overflow-y-auto">

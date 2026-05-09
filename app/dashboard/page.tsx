@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
 import {
@@ -79,14 +79,14 @@ import {
 import Link from "next/link";
 import { format } from "date-fns";
 import { redirect } from "next/navigation";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import {
+  useDeleteArticleMutation,
+  useGetMyArticlesQuery,
+  useUpdateArticleMutation,
+} from "@/lib/redux/news-api";
 
 export default function AdminDashboardPage() {
-  const { user, isLoading, token } = useAuth();
-  const [articles, setArticles] = useState<any[]>([]);
-  const [filteredArticles, setFilteredArticles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, isLoading } = useAuth();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<any>(null);
@@ -101,13 +101,19 @@ export default function AdminDashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const {
+    data: articles = [],
+    isLoading: loading,
+    refetch: refetchArticles,
+  } = useGetMyArticlesQuery(undefined, {
+    skip: !user || (user.role !== "ADMIN" && user.role !== "AUTHOR"),
+  });
+  const [updateArticleMutation] = useUpdateArticleMutation();
+  const [deleteArticleMutation] = useDeleteArticleMutation();
+  const getViewCount = (views: any) =>
+    typeof views === "number" ? views : Array.isArray(views) ? views.length : 0;
 
-  useEffect(() => {
-    if (!user) return;
-    loadArticles();
-  }, [user]);
-
-  useEffect(() => {
+  const filteredArticles = useMemo(() => {
     let filtered = [...articles];
 
     // Filter by search query
@@ -138,7 +144,7 @@ export default function AdminDashboardPage() {
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
           );
         case "views":
-          return (b.views || 0) - (a.views || 0);
+          return getViewCount(b.views) - getViewCount(a.views);
         case "likes":
           return (b.likes_count || 0) - (a.likes_count || 0);
         default:
@@ -146,7 +152,7 @@ export default function AdminDashboardPage() {
       }
     });
 
-    setFilteredArticles(filtered);
+    return filtered;
   }, [articles, searchQuery, activeTab, sortBy]);
 
   useEffect(() => {
@@ -158,29 +164,6 @@ export default function AdminDashboardPage() {
       return () => clearTimeout(timer);
     }
   }, [error, success]);
-
-  const loadArticles = async () => {
-    try {
-      const res = await fetch(`${API}/articles/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) throw new Error("Failed to load articles");
-
-      const json = await res.json();
-      const data = json.data || json;
-      setArticles(data);
-      setFilteredArticles(data);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load articles");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleEdit = (article: any) => {
     setSelectedArticle(article);
@@ -199,24 +182,16 @@ export default function AdminDashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/articles/${selectedArticle.id}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
+      await updateArticleMutation({
+        id: selectedArticle.id,
+        data: {
+          ...editForm,
+          status: editForm.status as "DRAFT" | "PUBLISHED",
         },
-        body: JSON.stringify(editForm),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update article");
-      }
-
+      }).unwrap();
       setSuccess("Article updated successfully");
       setEditDialogOpen(false);
-      loadArticles();
+      refetchArticles();
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to update article");
@@ -237,22 +212,10 @@ export default function AdminDashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/articles/${selectedArticle.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to delete article");
-      }
-
+      await deleteArticleMutation(selectedArticle.id).unwrap();
       setSuccess("Article deleted successfully");
       setDeleteDialogOpen(false);
-      loadArticles();
+      refetchArticles();
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to delete article");
@@ -280,7 +243,7 @@ export default function AdminDashboardPage() {
     total: articles.length,
     published: articles.filter((a) => a.status === "PUBLISHED").length,
     drafts: articles.filter((a) => a.status === "DRAFT").length,
-    views: articles.reduce((sum, a) => sum + (a.views || 0), 0),
+    views: articles.reduce((sum, a) => sum + getViewCount(a.views), 0),
     likes: articles.reduce((sum, a) => sum + (a.likes_count || 0), 0),
   };
 
@@ -616,7 +579,7 @@ export default function AdminDashboardPage() {
                           <div className="flex items-center justify-center gap-1">
                             <Eye className="h-4 w-4 text-muted-foreground" />
                             <span className="font-medium">
-                              {article.views || 0}
+                              {getViewCount(article.views)}
                             </span>
                           </div>
                         </TableCell>

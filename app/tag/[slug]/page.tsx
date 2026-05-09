@@ -1,33 +1,19 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useParams } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { ArticleCard } from "@/components/article-card";
 import { TagBadge } from "@/components/tag-badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { useGetTagArticlesQuery } from "@/lib/redux/news-api";
 
-async function getArticlesByTag(slug: string) {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/tags/${slug}/articles`,
-    { cache: "no-store" }
-  );
-
-  if (!res.ok) return null;
-
-  const json = await res.json();
-  return json.data || [];
-}
-
-export default async function TagPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params; // 🔥 FIX HERE
-
-  const articles = await getArticlesByTag(slug);
-
-  if (!articles) notFound();
+export default function TagPage() {
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug;
+  const { data, isLoading } = useGetTagArticlesQuery(slug, { skip: !slug });
+  const articles = data?.data ?? [];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -53,9 +39,13 @@ export default async function TagPage({
           </p>
         </div>
 
-        {articles.length > 0 ? (
+        {isLoading ? (
+          <div className="text-center border rounded-lg p-12">
+            <p className="text-muted-foreground">Loading articles...</p>
+          </div>
+        ) : articles.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {articles.map((article: any) => (
+            {articles.map((article) => (
               <ArticleCard key={article.id} article={article} variant="grid" />
             ))}
           </div>

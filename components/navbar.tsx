@@ -35,9 +35,9 @@ export function Navbar() {
   ];
   return (
     <>
-      <header className="sticky top-0 z-50 w-full bg-gray-800 text-primary-foreground shadow-md">
-        <div className="container mx-auto px-4">
-          <div className="flex h-20 items-center justify-between">
+      <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/95 text-foreground shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
             <Link
               href="/"
               className="flex items-center space-x-3 group transition-opacity hover:opacity-80"
@@ -54,15 +54,15 @@ export function Navbar() {
               </div>
             </Link>
 
-            <nav className="hidden lg:flex items-center gap-1">
+            <nav className="hidden lg:flex items-center gap-1.5">
               {navLinks.slice(0, 5).map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 ${
                     pathname === link.href
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground"
+                      ? "bg-accent text-accent-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
                   {link.name}
@@ -78,7 +78,7 @@ export function Navbar() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-primary-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-200"
+                    className="text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-200"
                     asChild
                   >
                     <Link href="/saved" title="Saved Articles">
@@ -89,7 +89,7 @@ export function Navbar() {
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
-                        className="relative h-9 w-9 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors duration-200"
+                        className="relative h-9 w-9 rounded-full hover:bg-muted hover:text-foreground transition-colors duration-200"
                       >
                         <Avatar className="h-9 w-9">
                           <AvatarImage
@@ -146,13 +146,13 @@ export function Navbar() {
                   <Button
                     variant="ghost"
                     asChild
-                    className="text-primary-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-200"
+                    className="text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-200"
                   >
                     <Link href="/login">Log in</Link>
                   </Button>
                   <Button
                     asChild
-                    className="bg-accent text-accent-foreground font-semibold hover:opacity-90 transition-opacity duration-200"
+                    className="bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity duration-200"
                   >
                     <Link href="/signup">Subscribe</Link>
                   </Button>
@@ -162,7 +162,7 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden text-primary-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-200"
+                className="lg:hidden text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-200"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
               >
                 {isMenuOpen ? (
@@ -176,16 +176,16 @@ export function Navbar() {
         </div>
 
         {isMenuOpen && (
-          <div className="border-t border-primary-foreground/20 bg-primary p-4 animate-in slide-in-from-top duration-300 lg:hidden">
+          <div className="border-t border-border bg-background p-4 animate-in slide-in-from-top duration-300 lg:hidden">
             <nav className="flex flex-col gap-2">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`px-4 py-2 text-sm font-medium transition-colors duration-200 rounded ${
+                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 ${
                     pathname === link.href
                       ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                   onClick={() => setIsMenuOpen(false)}
                 >

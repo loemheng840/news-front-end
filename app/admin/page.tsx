@@ -88,8 +88,19 @@ import {
   Pie,
   Cell,
 } from "recharts";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import type { User as AppUser } from "@/lib/types";
+import {
+  useCreateCategoryMutation,
+  useCreateTagMutation,
+  useDeleteCategoryMutation,
+  useDeleteUserMutation,
+  useGetAdminArticlesQuery,
+  useGetCategoriesQuery,
+  useGetTagsQuery,
+  useGetUsersQuery,
+  useUpdateCategoryMutation,
+  useUpdateUserRoleMutation,
+} from "@/lib/redux/news-api";
 
 // Color palette for charts
 const CHART_COLORS = {
@@ -99,16 +110,6 @@ const CHART_COLORS = {
   quaternary: "#ff8042",
   background: "#f5f5f5",
 };
-
-// Types for better type safety
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: number;
-  created_at: string;
-}
 
 interface Article {
   id: string;
@@ -125,12 +126,8 @@ interface Article {
 }
 
 export default function AdminPage() {
-  const { user, isLoading, token } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [loadingArticles, setLoadingArticles] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const { user, isLoading } = useAuth();
+  const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -141,14 +138,29 @@ export default function AdminPage() {
     "monthly",
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newTagName, setNewTagName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 8;
-
-  useEffect(() => {
-    if (!user) return;
-    loadUsers();
-    loadArticles();
-  }, [user]);
+  const { data: users = [], isLoading: loadingUsers, refetch: refetchUsers } =
+    useGetUsersQuery(undefined, { skip: !user || user.role !== "ADMIN" });
+  const {
+    data: articles = [],
+    isLoading: loadingArticles,
+    refetch: refetchArticles,
+  } = useGetAdminArticlesQuery(undefined, {
+    skip: !user || user.role !== "ADMIN",
+  });
+  const { data: categories = [] } = useGetCategoriesQuery();
+  const { data: tags = [] } = useGetTagsQuery();
+  const [createCategory] = useCreateCategoryMutation();
+  const [updateCategoryMutation] = useUpdateCategoryMutation();
+  const [deleteCategoryMutation] = useDeleteCategoryMutation();
+  const [createTag] = useCreateTagMutation();
+  const [updateUserRoleMutation] = useUpdateUserRoleMutation();
+  const [deleteUserMutation] = useDeleteUserMutation();
 
   useEffect(() => {
     if (error || success) {
@@ -159,50 +171,6 @@ export default function AdminPage() {
       return () => clearTimeout(timer);
     }
   }, [error, success]);
-
-  const loadUsers = async () => {
-    try {
-      const res = await fetch(`${API}/users`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) throw new Error("Failed to load users");
-
-      const data = await res.json();
-      setUsers(data);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load users");
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  const loadArticles = async () => {
-    try {
-      const res = await fetch(`${API}/articles/admin`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) throw new Error("Failed to load articles");
-
-      const json = await res.json();
-      // Ensure we always get an array
-      const articlesData = json.data || json || [];
-      setArticles(Array.isArray(articlesData) ? articlesData : []);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load articles");
-    } finally {
-      setLoadingArticles(false);
-    }
-  };
 
   // Filter users based on search
   const filteredUsers = useMemo(() => {
@@ -314,7 +282,7 @@ export default function AdminPage() {
       .slice(0, 5);
   }, [articles]);
 
-  const handleEditRole = (user: User) => {
+  const handleEditRole = (user: AppUser) => {
     setSelectedUser(user);
     setEditRole(user.role);
     setEditDialogOpen(true);
@@ -327,24 +295,13 @@ export default function AdminPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/users/${selectedUser.id}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ role: editRole }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update user role");
-      }
-
+      await updateUserRoleMutation({
+        id: selectedUser.id,
+        role: editRole,
+      }).unwrap();
       setSuccess("User role updated successfully");
       setEditDialogOpen(false);
-      loadUsers();
+      refetchUsers();
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to update user role");
@@ -353,7 +310,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleDeleteClick = (user: User) => {
+  const handleDeleteClick = (user: AppUser) => {
     setSelectedUser(user);
     setDeleteDialogOpen(true);
   };
@@ -365,25 +322,75 @@ export default function AdminPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/users/${selectedUser.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to delete user");
-      }
-
+      await deleteUserMutation(selectedUser.id).unwrap();
       setSuccess("User deleted successfully");
       setDeleteDialogOpen(false);
-      loadUsers();
+      refetchUsers();
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to delete user");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await createCategory({ name: newCategoryName.trim() }).unwrap();
+      setNewCategoryName("");
+      setSuccess("Category created");
+    } catch (err: any) {
+      setError(err?.data?.message || err.message || "Failed to create category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateCategory = async (id: number) => {
+    if (!editingCategoryName.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await updateCategoryMutation({
+        id,
+        name: editingCategoryName.trim(),
+      }).unwrap();
+      setEditingCategoryId(null);
+      setEditingCategoryName("");
+      setSuccess("Category updated");
+    } catch (err: any) {
+      setError(err?.data?.message || err.message || "Failed to update category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await deleteCategoryMutation(id).unwrap();
+      setSuccess("Category deleted");
+    } catch (err: any) {
+      setError(err?.data?.message || err.message || "Failed to delete category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await createTag({ name: newTagName.trim() }).unwrap();
+      setNewTagName("");
+      setSuccess("Tag created");
+    } catch (err: any) {
+      setError(err?.data?.message || err.message || "Failed to create tag");
     } finally {
       setSubmitting(false);
     }
@@ -407,7 +414,7 @@ export default function AdminPage() {
     totalArticles: articles.length,
     published: articles.filter((a) => a.status === "PUBLISHED").length,
     drafts: articles.filter((a) => a.status === "DRAFT").length,
-    activeUsers: users.filter((u) => u.status === 1).length,
+    activeUsers: users.filter((u) => Boolean(u.email_verified_at)).length,
     newUsersThisMonth: users.filter((u) => {
       const userDate = new Date(u.created_at);
       const now = new Date();
@@ -821,10 +828,10 @@ export default function AdminPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <div
-                                className={`h-2 w-2 rounded-full ${user.status === 1 ? "bg-green-500" : "bg-gray-400"}`}
+                                className={`h-2 w-2 rounded-full ${user.email_verified_at ? "bg-green-500" : "bg-gray-400"}`}
                               />
                               <span className="text-sm">
-                                {user.status === 1 ? "Active" : "Inactive"}
+                                {user.email_verified_at ? "Active" : "Inactive"}
                               </span>
                             </div>
                           </TableCell>
@@ -903,6 +910,107 @@ export default function AdminPage() {
                 )}
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Content Taxonomy</CardTitle>
+            <CardDescription>
+              Manage categories and tags used by articles
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-8 lg:grid-cols-2">
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold">Categories</h3>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="New category name"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                />
+                <Button onClick={handleCreateCategory} disabled={submitting}>
+                  Add
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {categories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className="flex items-center gap-2 rounded-md border p-2"
+                  >
+                    {editingCategoryId === cat.id ? (
+                      <>
+                        <Input
+                          value={editingCategoryName}
+                          onChange={(e) => setEditingCategoryName(e.target.value)}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpdateCategory(cat.id)}
+                          disabled={submitting}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingCategoryId(null);
+                            setEditingCategoryName("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 text-sm">{cat.name}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingCategoryId(cat.id);
+                            setEditingCategoryName(cat.name);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteCategory(cat.id)}
+                        >
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold">Tags</h3>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="New tag name"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                />
+                <Button onClick={handleCreateTag} disabled={submitting}>
+                  Add
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <Badge key={tag.id} variant="outline">
+                    #{tag.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
         <AuthDashboardPage />

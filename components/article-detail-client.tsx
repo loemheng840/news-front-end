@@ -21,9 +21,26 @@ import {
   ChevronUp,
 } from "lucide-react";
 import SocialShare from "./social-share";
+import { API_URL } from "@/lib/api";
+import { useAuth } from "@/components/auth-provider";
+import {
+  useBookmarkArticleMutation,
+  useCreateCommentMutation,
+  useDeleteCommentMutation,
+  useGetArticleCommentsQuery,
+  useGetBookmarksQuery,
+  useLazyGetCommentRepliesQuery,
+  useLikeArticleMutation,
+  useLikeCommentMutation,
+  useUnbookmarkArticleMutation,
+  useUnlikeArticleMutation,
+  useUnlikeCommentMutation,
+  useUpdateCommentMutation,
+  useViewArticleMutation,
+} from "@/lib/redux/news-api";
 
 // Type definitions
-type UserRole = "ADMIN" | "AUTHOR" | "READER";
+type UserRole = "ADMIN" | "AUTHOR" | "READER" | "EDITOR";
 
 interface User {
   id: number;
@@ -230,7 +247,7 @@ const CommentItem = ({
             <div className="bg-white rounded-2xl border border-blue-300 shadow-sm p-3">
               <Textarea
                 value={editText}
-                onChange={(e) => setEditText(e.target.value)}
+                onChange={(e: any) => setEditText(e.target.value)}
                 className="min-h-[80px] text-sm border-gray-200"
                 placeholder="Edit your comment..."
                 autoFocus
@@ -531,9 +548,28 @@ const CommentItem = ({
 };
 
 export default function ArticleDetailClient({ article }: { article: Article }) {
-  // Auth state
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const { user, token } = useAuth();
+  const { data: bookmarkList = [] } = useGetBookmarksQuery(undefined, {
+    skip: !user,
+  });
+  const {
+    data: fetchedComments = [],
+    isLoading: commentsLoading,
+    refetch: refetchComments,
+  } = useGetArticleCommentsQuery(article.id, {
+    skip: !article.id,
+  });
+  const [loadRepliesQuery] = useLazyGetCommentRepliesQuery();
+  const [viewArticle] = useViewArticleMutation();
+  const [likeArticle] = useLikeArticleMutation();
+  const [unlikeArticle] = useUnlikeArticleMutation();
+  const [bookmarkArticle] = useBookmarkArticleMutation();
+  const [unbookmarkArticle] = useUnbookmarkArticleMutation();
+  const [createComment] = useCreateCommentMutation();
+  const [updateCommentMutation] = useUpdateCommentMutation();
+  const [deleteCommentMutation] = useDeleteCommentMutation();
+  const [likeComment] = useLikeCommentMutation();
+  const [unlikeComment] = useUnlikeCommentMutation();
 
   // Article engagement state
   const [likes, setLikes] = useState(article.likes?.length || 0);
@@ -564,69 +600,41 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
   // Load replies state
   const [isLoadingReplies, setIsLoadingReplies] = useState<number | null>(null);
 
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-
-  // Initialize auth
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    const storedToken = localStorage.getItem("token");
-
-    if (storedUser) setUser(JSON.parse(storedUser));
-    if (storedToken) setToken(storedToken);
-  }, []);
-
   // Load comments and track view
   useEffect(() => {
-    loadComments();
     checkUserLikeStatus();
     checkUserBookmarkStatus();
 
-    // Track view
     if (token) {
-      fetch(`${API}/articles/${article.id}/view`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch((error) => console.error("Error tracking view:", error));
+      viewArticle(article.id).catch((error) =>
+        console.error("Error tracking view:", error),
+      );
     }
-  }, [article.id, token]);
+  }, [article.id, token, viewArticle]);
+
+  useEffect(() => {
+    setComments(organizeComments(fetchedComments));
+  }, [fetchedComments]);
+
+  useEffect(() => {
+    setIsLoadingComments(commentsLoading);
+  }, [commentsLoading]);
 
   const checkUserLikeStatus = useCallback(async () => {
-    if (!token) return;
+    if (!token || !user?.id) return;
 
-    try {
-      const res = await fetch(`${API}/articles/${article.id}/likes`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const userLike = data.find((like: any) => like.user_id === user?.id);
-        setLiked(!!userLike);
-      }
-    } catch (error) {
-      console.error("Error checking like status:", error);
-    }
-  }, [article.id, token, user?.id]);
+    const articleLikes = Array.isArray(article.likes) ? article.likes : [];
+    setLiked(articleLikes.some((like: any) => like.user_id === user.id));
+  }, [article.likes, token, user?.id]);
 
   const checkUserBookmarkStatus = useCallback(async () => {
     if (!token) return;
 
-    try {
-      const res = await fetch(`${API}/user/bookmarks`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const isBookmarked = data.some(
-          (bookmark: any) => bookmark.article_id === article.id,
-        );
-        setBookmarked(isBookmarked);
-      }
-    } catch (error) {
-      console.error("Error checking bookmark status:", error);
-    }
-  }, [article.id, token]);
+    const isBookmarked = bookmarkList.some(
+      (bookmark: any) => bookmark.id === article.id || bookmark.article?.id === article.id,
+    );
+    setBookmarked(isBookmarked);
+  }, [article.id, token, bookmarkList]);
 
   const toggleArticleLike = async () => {
     if (!user) {
@@ -649,18 +657,10 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       }
       setLiked(!previousLiked);
 
-      const method = previousLiked ? "DELETE" : "POST";
-      const res = await fetch(`${API}/articles/${article.id}/like`, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to toggle like");
+      if (previousLiked) {
+        await unlikeArticle(article.id).unwrap();
+      } else {
+        await likeArticle(article.id).unwrap();
       }
     } catch (error: any) {
       console.error("Error toggling article like:", error);
@@ -689,18 +689,10 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       // Optimistic update
       setBookmarked(!previousBookmarked);
 
-      const method = previousBookmarked ? "DELETE" : "POST";
-      const res = await fetch(`${API}/articles/${article.id}/bookmark`, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to toggle bookmark");
+      if (previousBookmarked) {
+        await unbookmarkArticle(article.id).unwrap();
+      } else {
+        await bookmarkArticle(article.id).unwrap();
       }
     } catch (error: any) {
       console.error("Error toggling bookmark:", error);
@@ -724,40 +716,18 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
   };
 
   const loadComments = useCallback(async () => {
+    setIsLoadingComments(true);
     try {
-      setIsLoadingComments(true);
-      const headers: any = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const res = await fetch(`${API}/articles/${article.id}/comments`, {
-        headers,
-      });
-
-      if (!res.ok) throw new Error("Failed to load comments");
-
-      const data = await res.json();
-      setComments(organizeComments(data));
-    } catch (error) {
-      console.error("Error loading comments:", error);
-      setComments([]);
+      await refetchComments();
     } finally {
       setIsLoadingComments(false);
     }
-  }, [article.id, token]);
+  }, [refetchComments]);
 
   const loadReplies = async (commentId: number) => {
     try {
       setIsLoadingReplies(commentId);
-      const headers: any = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const res = await fetch(`${API}/comments/${commentId}/replies`, {
-        headers,
-      });
-
-      if (!res.ok) throw new Error("Failed to load replies");
-
-      const data = await res.json();
+      const data = await loadRepliesQuery(commentId).unwrap();
 
       // Update the comment with loaded replies
       setComments((prev) => updateCommentReplies(prev, commentId, data));
@@ -855,22 +825,10 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       setComments((prev) => [optimisticComment, ...prev]);
       setCommentText("");
 
-      const res = await fetch(`${API}/comments`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      await createComment({
           article_id: article.id,
           content: commentText,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to post comment");
-      }
+      }).unwrap();
 
       await loadComments();
     } catch (error: any) {
@@ -916,23 +874,11 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       setReplyTexts({ ...replyTexts, [parentId]: "" });
       setShowReplyInput(null);
 
-      const res = await fetch(`${API}/comments`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      await createComment({
           article_id: article.id,
           parent_id: parentId,
           content: replyText,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to post reply");
-      }
+      }).unwrap();
 
       await loadComments();
     } catch (error: any) {
@@ -1005,19 +951,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       setEditingComment(null);
       setEditText("");
 
-      const res = await fetch(`${API}/comments/${commentId}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content: editText }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update comment");
-      }
+      await updateCommentMutation({ id: commentId, content: editText }).unwrap();
     } catch (error: any) {
       console.error("Error updating comment:", error);
       alert(error.message || "Failed to update comment. Please try again.");
@@ -1064,15 +998,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       // Optimistic update
       setComments((prev) => removeCommentFromTree(prev, commentId));
 
-      const res = await fetch(`${API}/comments/${commentId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to delete comment");
-      }
+      await deleteCommentMutation(commentId).unwrap();
     } catch (error: any) {
       console.error("Error deleting comment:", error);
       alert(error.message || "Failed to delete comment. Please try again.");
@@ -1108,15 +1034,10 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       // Optimistic update
       setComments((prev) => updateCommentLike(prev, commentId, !isLiked));
 
-      const method = isLiked ? "DELETE" : "POST";
-      const res = await fetch(`${API}/comments/${commentId}/like`, {
-        method,
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to toggle comment like");
+      if (isLiked) {
+        await unlikeComment(commentId).unwrap();
+      } else {
+        await likeComment(commentId).unwrap();
       }
     } catch (error: any) {
       console.error("Error toggling comment like:", error);
@@ -1191,7 +1112,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
                 src={
                   article.thumbnail.startsWith("http")
                     ? article.thumbnail
-                    : `${API?.replace("/api", "")}/storage/${article.thumbnail}`
+                    : `${API_URL.replace("/api", "")}/storage/${article.thumbnail}`
                 }
                 alt={article.title}
                 className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"

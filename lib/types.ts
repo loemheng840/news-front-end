@@ -1,4 +1,4 @@
-export type UserRole = "ADMIN" | "AUTHOR" | "READER";
+export type UserRole = "ADMIN" | "AUTHOR" | "READER" | "EDITOR";
 
 export interface User {
   id: number;
@@ -21,7 +21,8 @@ export interface Article {
   content: string;
   thumbnail?: string | null;
   status: ArticleStatus;
-  // views: number;
+  likes_count?: number;
+  bookmarks_count?: number;
   category_id: number;
   author_id: number;
   published_at?: string | null;
@@ -34,7 +35,7 @@ export interface Article {
   tags?: Tag[];
   comments?: Comment[];
   likes?: Like[];
-  views?: ArticleView[];
+  views?: ArticleView[] | number;
   bookmarks?: Bookmark[];
   excerpt?: string;
 }

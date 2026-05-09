@@ -7,6 +7,10 @@ import { TagBadge } from "@/components/tag-badge";
 import { Bookmark, Calendar, Eye, Heart, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
+import {
+  useBookmarkArticleMutation,
+  useUnbookmarkArticleMutation,
+} from "@/lib/redux/news-api";
 
 interface ArticleCardProps {
   article: Article;
@@ -19,6 +23,8 @@ export function ArticleCard({
 }: ArticleCardProps) {
   const author = article.author;
   const category = article.category;
+  const viewCount =
+    typeof article.views === "number" ? article.views : article.views?.length || 0;
 
   const formattedDate = article.published_at
     ? format(new Date(article.published_at), "MMM dd, yyyy")
@@ -32,24 +38,20 @@ export function ArticleCard({
 
   const [saved, setSaved] = useState(article.bookmarks || false);
   const [isBookmarking, setIsBookmarking] = useState(false);
+  const [bookmarkArticle] = useBookmarkArticleMutation();
+  const [unbookmarkArticle] = useUnbookmarkArticleMutation();
 
   const toggleBookmark = async () => {
     if (isBookmarking) return;
 
     setIsBookmarking(true);
-    const method = saved ? "DELETE" : "POST";
 
     try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/articles/${article.id}/bookmark`,
-        {
-          method,
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        },
-      );
+      if (saved) {
+        await unbookmarkArticle(article.id).unwrap();
+      } else {
+        await bookmarkArticle(article.id).unwrap();
+      }
       setSaved(!saved);
     } catch (error) {
       console.error("Failed to toggle bookmark:", error);
@@ -128,7 +130,7 @@ export function ArticleCard({
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5 hover:text-foreground transition-colors">
                   <Eye className="h-4 w-4" />
-                  {article.views?.length || 0}
+                  {viewCount}
                 </span>
                 <span className="flex items-center gap-1.5 hover:text-red-500 transition-colors">
                   <Heart className="h-4 w-4" />
@@ -171,7 +173,7 @@ export function ArticleCard({
             <span>{formattedDate}</span>
             <span className="flex items-center gap-1">
               <Eye className="h-3 w-3" />
-              {article.views?.length || 0}
+              {viewCount}
             </span>
           </div>
         </div>
@@ -232,7 +234,7 @@ export function ArticleCard({
           </p>
 
           {/* Tags */}
-          {article.tags?.toString() !== "0" && article.tags?.length > 0 && (
+          {Array.isArray(article.tags) && article.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-4">
               {article.tags.slice(0, 3).map((tag) => (
                 <TagBadge key={tag.id} tag={tag.name} className="text-xs" />
@@ -267,7 +269,7 @@ export function ArticleCard({
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1 hover:text-foreground transition-colors">
                   <Eye className="h-3 w-3" />
-                  {article.views?.length || 0}
+                  {viewCount}
                 </span>
                 <span className="flex items-center gap-1 hover:text-red-500 transition-colors">
                   <Heart className="h-3 w-3" />
@@ -332,7 +334,7 @@ export function ArticleCard({
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1 hover:text-foreground transition-colors">
               <Eye className="h-3.5 w-3.5" />
-              {article.views?.length || 0}
+              {viewCount}
             </span>
             <span className="flex items-center gap-1 hover:text-red-500 transition-colors">
               <Heart className="h-3.5 w-3.5" />

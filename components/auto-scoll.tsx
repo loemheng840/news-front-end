@@ -13,7 +13,7 @@ export function InfiniteAutoScroll() {
     "right",
   );
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
 
   // Sample images with better alt text
   const images: ImageData[] = [

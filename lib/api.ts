@@ -1,157 +1,109 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import type { Article, Category, Comment, Tag, User } from "@/lib/types";
 
-export interface PaginatedResponse<T> {
-  current_page: number;
-  data: T[];
-  first_page_url: string;
-  from: number;
-  last_page: number;
-  last_page_url: string;
-  links: Array<{ url: string | null; label: string; active: boolean }>;
-  next_page_url: string | null;
-  path: string;
-  per_page: number;
-  prev_page_url: string | null;
-  to: number;
-  total: number;
-}
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
-// Client-side API wrapper for route handlers
-export const apiClient = {
-  async getArticles(page = 1): Promise<PaginatedResponse<any>> {
-    const res = await fetch(`/api/proxy/articles?page=${page}`);
-    if (!res.ok) throw new Error(`Failed to fetch articles`);
-    return res.json();
-  },
+export const apiRoutes = {
+  login: "/login",
+  register: "/register",
+  logout: "/logout",
+  me: "/me",
 
-  async searchArticles(
-    query: string,
-    page = 1,
-  ): Promise<PaginatedResponse<any>> {
-    const res = await fetch(
-      `/api/proxy/articles/search?q=${encodeURIComponent(query)}&page=${page}`,
-    );
-    if (!res.ok) throw new Error(`Search failed`);
-    return res.json();
-  },
+  articles: "/articles",
+  latestArticles: "/articles/latest",
+  trendingArticles: "/articles/trending",
+  featuredArticles: "/articles/featured",
+  searchArticles: "/articles/search",
+  articlesByDate: "/articles/date",
+  articleByCategory: (slug: string) => `/articles/category/${slug}`,
+  articleByTag: (slug: string) => `/articles/tag/${slug}`,
+  articleRelated: (idOrSlug: string | number) => `/articles/${idOrSlug}/related`,
+  articleComments: (idOrSlug: string | number) =>
+    `/articles/${idOrSlug}/comments`,
+  articleCommentReplies: (articleId: string | number, parentId: string | number) =>
+    `/articles/${articleId}/comments/${parentId}/replies`,
+  myArticles: "/articles/me",
+  editorArticles: "/editor/articles",
+  adminArticles: "/articles/admin",
+  articleSubmit: (id: string | number) => `/articles/${id}/submit`,
+  articleMeta: (id: string | number) => `/articles/${id}/meta`,
+  articleLike: (id: string | number) => `/articles/${id}/like`,
+  articleBookmark: (id: string | number) => `/articles/${id}/bookmark`,
+  articleView: (id: string | number) => `/articles/${id}/view`,
 
-  async getArticlesByDate(
-    from: string,
-    to: string,
-    page = 1,
-  ): Promise<PaginatedResponse<any>> {
-    const res = await fetch(
-      `/api/proxy/articles/date?from=${from}&to=${to}&page=${page}`,
-    );
-    if (!res.ok) throw new Error(`Failed to fetch articles by date`);
-    return res.json();
-  },
+  categories: "/categories",
+  categoryBySlug: (slug: string) => `/categories/${slug}`,
+  categoryArticles: (slug: string) => `/categories/${slug}/articles`,
 
-  async getLatestArticles(page = 1): Promise<PaginatedResponse<any>> {
-    const res = await fetch(`/api/proxy/articles/latest?page=${page}`);
-    if (!res.ok) throw new Error(`Failed to fetch latest articles`);
-    return res.json();
-  },
+  tags: "/tags",
+  tagArticles: (slug: string) => `/tags/${slug}/articles`,
 
-  async getArticleBySlug(slug: string): Promise<any> {
-    const res = await fetch(`/api/proxy/articles/${slug}`);
-    if (!res.ok) throw new Error(`Failed to fetch article`);
-    return res.json();
-  },
+  bookmarks: "/me/bookmarks",
+  users: "/users",
 
-  async getTrendingArticles(limit = 5): Promise<any[]> {
-    const response = await this.getArticles(1);
-    return response.data
-      .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
-      .slice(0, limit);
-  },
-
-  async getTags(): Promise<any[]> {
-    try {
-      const res = await fetch(`/api/proxy/tags`);
-      if (!res.ok) throw new Error("Failed to fetch tags");
-      return res.json();
-    } catch (error) {
-      console.error("[API] Error fetching tags:", error);
-      return [];
-    }
-  },
-
-  async getCategories(): Promise<any[]> {
-    try {
-      const res = await fetch(`/api/proxy/categories`);
-      if (!res.ok) throw new Error("Failed to fetch categories");
-      return res.json();
-    } catch (error) {
-      console.error("[API] Error fetching categories:", error);
-      return [];
-    }
-  },
+  comments: "/comments",
+  commentReplies: (commentId: string | number) => `/comments/${commentId}/replies`,
+  commentLike: (commentId: string | number) => `/comments/${commentId}/like`,
+  moderateComment: (commentId: string | number) =>
+    `/comments/${commentId}/moderate`,
 };
-const API = process.env.NEXT_PUBLIC_API_URL;
 
-export async function fetchUsers(token: string) {
-  const res = await fetch(`${API}/users`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return res.json();
+export function buildApiUrl(path: string): string {
+  return `${API_URL}${path}`;
 }
 
-export async function updateUserRole(id: number, role: string, token: string) {
-  return fetch(`${API}/users/${id}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ role }),
-  });
+export function extractArray<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.data)) return record.data as T[];
+    if (Array.isArray(record.articles)) return record.articles as T[];
+    if (Array.isArray(record.categories)) return record.categories as T[];
+    if (Array.isArray(record.tags)) return record.tags as T[];
+  }
+  return [];
 }
 
-export async function deleteUser(id: number, token: string) {
-  return fetch(`${API}/users/${id}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export function extractEntity<T>(payload: unknown, key?: string): T {
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    if (key && record[key] !== undefined) return record[key] as T;
+    if (record.data && !Array.isArray(record.data)) return record.data as T;
+  }
+  return payload as T;
 }
 
-export async function fetchArticles(token: string) {
-  const res = await fetch(`${API}/articles`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return res.json();
+export function extractPaginatedData<T>(payload: unknown) {
+  if (payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)) {
+    return payload as {
+      current_page?: number;
+      data: T[];
+      last_page?: number;
+      per_page?: number;
+      total?: number;
+    };
+  }
+
+  return {
+    data: extractArray<T>(payload),
+    current_page: 1,
+    last_page: 1,
+    per_page: extractArray<T>(payload).length,
+    total: extractArray<T>(payload).length,
+  };
 }
 
-export async function updateArticle(id: number, data: any, token: string) {
-  return fetch(`${API}/articles/${id}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
+export function extractBookmarkArticles(payload: unknown): Article[] {
+  return extractArray<{ article?: Article } | Article>(payload)
+    .map((item) =>
+      item && typeof item === "object" && "article" in item ? item.article : item,
+    )
+    .filter(Boolean) as Article[];
 }
 
-export async function deleteArticle(id: number, token: string) {
-  return fetch(`${API}/articles/${id}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-export async function fetchBookmarks(token: string) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/me/bookmarks`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!res.ok) throw new Error("Failed to fetch bookmarks");
-
-  const data = await res.json();
-
-  // Extract article objects
-  return data.map((item: any) => item.article);
-}
+export type NewsListPayload =
+  | Article[]
+  | Category[]
+  | Tag[]
+  | Comment[]
+  | User[];

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,21 +13,20 @@ import {
 } from "@/components/ui/table";
 import { Eye, Heart, TrendingUp, ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import { useGetTrendingArticlesQuery } from "@/lib/redux/news-api";
 
 export default function TrendingPage() {
-  const [articles, setArticles] = useState<any[]>([]);
-
-  useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles/trending`)
-      .then((res) => res.json())
-      .then((data) => setArticles(data));
-  }, []);
+  const { data: articles = [] } = useGetTrendingArticlesQuery();
 
   const trendingArticles = [...articles].sort((a, b) => {
     const scoreA =
-      a.views + (a.likes_count ?? 0) * 10 + (a.bookmarks_count ?? 0) * 15;
+      (typeof a.views === "number" ? a.views : a.views?.length ?? 0) +
+      (a.likes_count ?? 0) * 10 +
+      (a.bookmarks_count ?? 0) * 15;
     const scoreB =
-      b.views + (b.likes_count ?? 0) * 10 + (b.bookmarks_count ?? 0) * 15;
+      (typeof b.views === "number" ? b.views : b.views?.length ?? 0) +
+      (b.likes_count ?? 0) * 10 +
+      (b.bookmarks_count ?? 0) * 15;
     return scoreB - scoreA;
   });
 
@@ -80,7 +78,9 @@ export default function TrendingPage() {
               <TableBody>
                 {trendingArticles.map((article, index) => {
                   const score =
-                    article.views +
+                    (typeof article.views === "number"
+                      ? article.views
+                      : article.views?.length ?? 0) +
                     (article.likes_count ?? 0) * 10 +
                     (article.bookmarks_count ?? 0) * 15;
 
@@ -97,7 +97,9 @@ export default function TrendingPage() {
                       </TableCell>
                       <TableCell>{article.author?.name}</TableCell>
                       <TableCell className="text-right">
-                        {article.views}
+                        {typeof article.views === "number"
+                          ? article.views
+                          : article.views?.length ?? 0}
                       </TableCell>
                       <TableCell className="text-right">
                         {article.likes_count ?? 0}
