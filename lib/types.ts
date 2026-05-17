@@ -12,7 +12,7 @@ export interface User {
   updated_at: string;
 }
 
-export type ArticleStatus = "DRAFT" | "PUBLISHED";
+export type ArticleStatus = "DRAFT" | "REVIEW" | "PUBLISHED" | "ARCHIVED";
 
 export interface Article {
   id: number;
@@ -28,6 +28,13 @@ export interface Article {
   published_at?: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
+
+  // Enhanced fields
+  excerpt?: string | null;
+  is_featured?: boolean;
+  is_breaking?: boolean;
+  reading_time_minutes?: number | null;
 
   // Optional relationships (loaded via with())
   category?: Category;
@@ -37,7 +44,7 @@ export interface Article {
   likes?: Like[];
   views?: ArticleView[] | number;
   bookmarks?: Bookmark[];
-  excerpt?: string;
+  seo_meta?: SeoMeta | null;
 }
 
 export interface Tag {
@@ -52,6 +59,10 @@ export interface Category {
   id: number;
   name: string;
   slug: string;
+  parent_id?: number | null;
+  description?: string | null;
+  sort_order?: number;
+  children?: Category[];
   created_at?: string;
   updated_at?: string;
 }
@@ -65,6 +76,7 @@ export interface Comment {
   parent_id?: number | null;
   content: string;
   status: CommentStatus;
+  ip_address?: string | null; // Only visible to admin
   created_at: string;
   updated_at: string;
 
@@ -87,6 +99,13 @@ export interface Like {
 export interface ArticleView {
   id: number;
   article_id: number;
+  user_id?: number | null;
+  session_id?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  referrer?: string | null;
+  read_percent?: number | null;
+  time_on_page?: number | null;
   user?: User;
 }
 
@@ -96,6 +115,161 @@ export interface Bookmark {
   user_id: number;
   user?: User;
 }
+
+// ==================== NEW TYPES ====================
+
+export interface UserProfile {
+  id: number;
+  user_id: number;
+  bio?: string | null;
+  avatar?: string | null;
+  website?: string | null;
+  location?: string | null;
+  social_links?: {
+    twitter?: string;
+    facebook?: string;
+    linkedin?: string;
+  } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ArticleRevision {
+  id: number;
+  article_id: number;
+  editor_id: number;
+  title: string;
+  content: string;
+  change_note?: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  editor?: User;
+}
+
+export interface SeoMeta {
+  id: number;
+  article_id: number;
+  meta_title?: string | null;
+  meta_description?: string | null;
+  og_image?: string | null;
+  canonical_url?: string | null;
+  schema_json?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MediaLibraryItem {
+  id: number;
+  uploader_id: number;
+  filename: string;
+  path: string;
+  mime_type: string;
+  file_size: number;
+  alt_text?: string | null;
+  created_at: string;
+  updated_at: string;
+  uploader?: User;
+}
+
+export interface SearchLog {
+  id: number;
+  user_id?: number | null;
+  query: string;
+  result_count: number;
+  ip_address: string;
+  created_at: string;
+}
+
+export interface AdPlacement {
+  id: number;
+  name: string;
+  position: "HEADER" | "SIDEBAR" | "IN_ARTICLE" | "FOOTER";
+  type: "BANNER" | "NATIVE" | "VIDEO";
+  start_date?: string | null;
+  end_date?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdImpression {
+  id: number;
+  placement_id: number;
+  article_id?: number | null;
+  user_id?: number | null;
+  clicked: boolean;
+  ip_address: string;
+  created_at: string;
+  placement?: AdPlacement;
+}
+
+export interface AdAnalytics {
+  placement_id: number;
+  total_impressions: number;
+  total_clicks: number;
+  click_through_rate: number;
+  placement?: AdPlacement;
+}
+
+export interface Notification {
+  id: number;
+  user_id: number;
+  type: "NEW_ARTICLE" | "COMMENT" | "LIKE" | "FOLLOW";
+  data: Record<string, unknown>;
+  read_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationSetting {
+  id: number;
+  user_id: number;
+  email_notifications: boolean;
+  push_notifications: boolean;
+  follow_notifications: boolean;
+  comment_notifications: boolean;
+  like_notifications: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Report {
+  id: number;
+  user_id: number;
+  target_type: "article" | "comment" | "user";
+  target_id: number;
+  reason: string;
+  status: "PENDING" | "REVIEWED" | "REJECTED";
+  reviewed_by?: number | null;
+  created_at: string;
+  updated_at: string;
+  user?: User;
+  reviewer?: User;
+}
+
+export interface AuditLog {
+  id: number;
+  user_id?: number | null;
+  action: "created" | "updated" | "deleted" | "login" | "logout";
+  model_type?: string | null;
+  model_id?: number | null;
+  old_values?: Record<string, unknown> | null;
+  new_values?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at: string;
+  user?: User;
+}
+
+export interface Follow {
+  id: number;
+  follower_id: number;
+  following_id: number;
+  created_at: string;
+}
+
+// ==================== EXISTING TYPES ====================
 
 export type EngagementType = "view" | "like" | "bookmark";
 
@@ -126,7 +300,8 @@ export type ArticleWithEngagement = Article & {
   likes?: Like[];
   bookmarks?: Bookmark[];
 };
-// API Response types for better type safety
+
+// API Response types
 export interface ApiResponse<T> {
   data?: T;
   message?: string;
@@ -196,6 +371,8 @@ export interface ArticleQueryParams {
   page?: number;
   search?: string;
   tag?: string;
+  is_featured?: boolean;
+  is_breaking?: boolean;
 }
 
 // Update types for form submissions
@@ -207,6 +384,8 @@ export interface ArticleUpdateData {
   status?: ArticleStatus;
   category_id?: number;
   published_at?: string;
+  is_featured?: boolean;
+  is_breaking?: boolean;
 }
 
 export interface CommentUpdateData {
@@ -214,7 +393,7 @@ export interface CommentUpdateData {
   status?: CommentStatus;
 }
 
-// Stats/Analytics types (if you plan to add dashboard)
+// Stats/Analytics types
 export interface ArticleStats {
   total_views: number;
   total_likes: number;
@@ -226,16 +405,6 @@ export interface UserStats {
   total_articles: number;
   total_comments: number;
   total_likes_received: number;
-}
-
-// Notification types (for future feature)
-export interface Notification {
-  id: number;
-  user_id: number;
-  type: "comment" | "like" | "reply" | "mention";
-  data: Record<string, any>;
-  read_at?: string | null;
-  created_at: string;
 }
 
 // Search result type

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
-import { Navbar } from "@/components/navbar";
 import {
   Card,
   CardContent,
@@ -275,7 +274,6 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-gray-50 to-white">
-      <Navbar />
 
       <main className="flex-1 container mx-auto px-4 py-8">
         {/* Header Section */}
@@ -288,12 +286,6 @@ export default function AdminDashboardPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/dashboard/analytics">
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  Analytics
-                </Link>
-              </Button>
               <Button asChild>
                 <Link href="/dashboard/new">
                   <Plus className="mr-2 h-4 w-4" />

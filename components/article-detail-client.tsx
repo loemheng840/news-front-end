@@ -29,9 +29,13 @@ import {
   useDeleteCommentMutation,
   useGetArticleCommentsQuery,
   useGetBookmarksQuery,
+  useFollowUserMutation,
+  useUnfollowUserMutation,
+  useGetFollowStatusQuery,
   useLazyGetCommentRepliesQuery,
   useLikeArticleMutation,
   useLikeCommentMutation,
+  useReactToCommentMutation,
   useUnbookmarkArticleMutation,
   useUnlikeArticleMutation,
   useUnlikeCommentMutation,
@@ -54,7 +58,7 @@ interface User {
   updated_at: string;
 }
 
-type ArticleStatus = "DRAFT" | "PUBLISHED";
+type ArticleStatus = "DRAFT" | "REVIEW" | "PUBLISHED" | "ARCHIVED";
 
 interface Category {
   id: number;
@@ -160,6 +164,7 @@ const CommentItem = ({
   onEdit,
   onDelete,
   onLike,
+  onReact,
   isDeleting,
   isPostingReply,
   editingComment,
@@ -210,6 +215,10 @@ const CommentItem = ({
     );
   };
 
+  const getAvatarUrl = (avatar?: string | null) => {
+    if (!avatar) return null;
+    return `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}/storage/${avatar}`;
+  };
   const getAvatarColor = (id: number) => {
     const colors = [
       "from-blue-400 to-cyan-500",
@@ -231,15 +240,23 @@ const CommentItem = ({
       {/* Main Comment */}
       <div className="flex gap-2 group">
         {/* Avatar */}
-        <div
-          className={`${depth > 0 ? "w-8 h-8" : "w-10 h-10"} rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 bg-gradient-to-br ${getAvatarColor(
-            comment.user?.id || 0,
-          )} shadow-md`}
-        >
-          <span className={depth > 0 ? "text-xs" : "text-sm"}>
-            {getInitials(comment.user?.name)}
-          </span>
-        </div>
+        {getAvatarUrl(comment.user?.avatar) ? (
+          <img
+            src={getAvatarUrl(comment.user?.avatar)!}
+            alt={comment.user?.name || ""}
+            className={`${depth > 0 ? "w-8 h-8" : "w-10 h-10"} rounded-full object-cover flex-shrink-0 shadow-md`}
+          />
+        ) : (
+          <div
+            className={`${depth > 0 ? "w-8 h-8" : "w-10 h-10"} rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 bg-gradient-to-br ${getAvatarColor(
+              comment.user?.id || 0,
+            )} shadow-md`}
+          >
+            <span className={depth > 0 ? "text-xs" : "text-sm"}>
+              {getInitials(comment.user?.name)}
+            </span>
+          </div>
+        )}
 
         <div className="flex-1 min-w-0">
           {/* Comment Bubble */}
@@ -281,9 +298,8 @@ const CommentItem = ({
             </div>
           ) : (
             <div
-              className={`bg-gray-100 rounded-2xl px-4 py-2.5 inline-block max-w-full ${
-                isDeletingThis ? "opacity-50" : ""
-              }`}
+              className={`bg-gray-100 rounded-2xl px-4 py-2.5 inline-block max-w-full ${isDeletingThis ? "opacity-50" : ""
+                }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
@@ -361,41 +377,73 @@ const CommentItem = ({
             </div>
           )}
 
-          {/* Action Buttons (Facebook-style) */}
+          {/* Action Buttons with Emoji Reactions */}
           {!isEditing && !isDeletingThis && (
-            <div className="flex items-center gap-3 mt-1 px-3 text-xs font-semibold">
-              <button
-                onClick={() => onLike(comment.id, comment.is_liked)}
-                className={`${
-                  comment.is_liked
-                    ? "text-blue-600"
-                    : "text-gray-600 hover:text-blue-600"
-                } transition`}
-                disabled={!user}
-              >
-                Like
-                {comment.likes_count > 0 && ` · ${comment.likes_count}`}
-              </button>
-
-              <button
-                onClick={() =>
-                  setShowReplyInput(showingReply ? null : comment.id)
-                }
-                className="text-gray-600 hover:text-blue-600 transition"
-                disabled={!user}
-              >
-                Reply
-              </button>
-
-              <span className="text-gray-500 font-normal">
-                {formatDate(comment.created_at)}
-              </span>
-
-              {comment.updated_at !== comment.created_at && (
-                <span className="text-gray-400 font-normal italic">
-                  (edited)
-                </span>
+            <div className="flex flex-col gap-1 mt-1 px-3">
+              {/* Emoji Reactions Display */}
+              {comment.reactions && comment.reactions.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1">
+                  {Object.entries(
+                    (comment.reactions as { emoji: string; user_id: number }[]).reduce((acc: Record<string, number>, r) => {
+                      acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                      return acc;
+                    }, {})
+                  ).map(([emoji, count]) => (
+                    <span
+                      key={emoji}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-blue-50 border border-blue-100 cursor-pointer hover:bg-blue-100 transition"
+                      onClick={() => onReact && onReact(comment.id, emoji)}
+                    >
+                      {emoji} <span className="font-medium text-blue-700">{count as number}</span>
+                    </span>
+                  ))}
+                </div>
               )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 text-xs font-semibold">
+                {/* Emoji Reaction Picker */}
+                <div className="relative group">
+                  <button
+                    className="text-gray-600 hover:text-blue-600 transition"
+                    disabled={!user}
+                  >
+                    React
+                  </button>
+                  <div className="absolute bottom-full left-0 mb-1 hidden group-hover:flex bg-white border border-gray-200 rounded-full shadow-lg px-2 py-1 gap-1 z-50">
+                    {["👍", "❤️", "😂", "😮", "😢"].map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => onReact && onReact(comment.id, emoji)}
+                        className="text-lg hover:scale-125 transition-transform duration-150 p-0.5"
+                        disabled={!user}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() =>
+                    setShowReplyInput(showingReply ? null : comment.id)
+                  }
+                  className="text-gray-600 hover:text-blue-600 transition"
+                  disabled={!user}
+                >
+                  Reply
+                </button>
+
+                <span className="text-gray-500 font-normal">
+                  {formatDate(comment.created_at)}
+                </span>
+
+                {comment.updated_at !== comment.created_at && (
+                  <span className="text-gray-400 font-normal italic">
+                    (edited)
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -409,13 +457,21 @@ const CommentItem = ({
           {/* Reply Input (Facebook-style) */}
           {showingReply && user && (
             <div className="flex gap-2 mt-3">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 bg-gradient-to-br ${getAvatarColor(
-                  user.id,
-                )} shadow-md text-xs`}
-              >
-                {getInitials(user.name)}
-              </div>
+              {getAvatarUrl(user.avatar) ? (
+                <img
+                  src={getAvatarUrl(user.avatar)!}
+                  alt={user.name}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0 shadow-md"
+                />
+              ) : (
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 bg-gradient-to-br ${getAvatarColor(
+                    user.id,
+                  )} shadow-md text-xs`}
+                >
+                  {getInitials(user.name)}
+                </div>
+              )}
               <div className="flex-1 bg-gray-100 rounded-2xl px-4 py-2">
                 <Textarea
                   placeholder={`Reply to ${comment.user?.name || "user"}...`}
@@ -547,6 +603,37 @@ const CommentItem = ({
   );
 };
 
+// Follow Button Component
+function FollowButton({ authorId }: { authorId: number }) {
+  const { data: statusData } = useGetFollowStatusQuery(authorId);
+  const [followUser, { isLoading: isFollowing }] = useFollowUserMutation();
+  const [unfollowUser, { isLoading: isUnfollowing }] = useUnfollowUserMutation();
+
+  const isFollowed = statusData?.data?.is_following ?? false;
+  const loading = isFollowing || isUnfollowing;
+
+  const handleClick = async () => {
+    if (isFollowed) {
+      await unfollowUser(authorId);
+    } else {
+      await followUser(authorId);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${isFollowed
+        ? "bg-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600 border border-gray-300"
+        : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+        } ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      {loading ? "..." : isFollowed ? "Following" : "Follow"}
+    </button>
+  );
+}
+
 export default function ArticleDetailClient({ article }: { article: Article }) {
   const { user, token } = useAuth();
   const { data: bookmarkList = [] } = useGetBookmarksQuery(undefined, {
@@ -570,6 +657,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
   const [deleteCommentMutation] = useDeleteCommentMutation();
   const [likeComment] = useLikeCommentMutation();
   const [unlikeComment] = useUnlikeCommentMutation();
+  const [reactToCommentMutation] = useReactToCommentMutation();
 
   // Article engagement state
   const [likes, setLikes] = useState(article.likes?.length || 0);
@@ -606,7 +694,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     checkUserBookmarkStatus();
 
     if (token) {
-      viewArticle(article.id).catch((error) =>
+      viewArticle({ id: article.id }).catch((error) =>
         console.error("Error tracking view:", error),
       );
     }
@@ -826,8 +914,8 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       setCommentText("");
 
       await createComment({
-          article_id: article.id,
-          content: commentText,
+        article_id: article.id,
+        content: commentText,
       }).unwrap();
 
       await loadComments();
@@ -875,9 +963,9 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
       setShowReplyInput(null);
 
       await createComment({
-          article_id: article.id,
-          parent_id: parentId,
-          content: replyText,
+        article_id: article.id,
+        parent_id: parentId,
+        content: replyText,
       }).unwrap();
 
       await loadComments();
@@ -1078,6 +1166,18 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     setEditText("");
   };
 
+  const reactToComment = async (commentId: number, emoji: string) => {
+    if (!user) {
+      alert("Please login to react");
+      return;
+    }
+    try {
+      await reactToCommentMutation({ commentId, emoji }).unwrap();
+    } catch (error: any) {
+      console.error("Error reacting to comment:", error);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
@@ -1101,13 +1201,19 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
     return name?.charAt(0).toUpperCase() || "A";
   };
 
+  const getAvatarUrl = (avatar?: string | null) => {
+    if (!avatar) return null;
+    return `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}/storage/${avatar}`;
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <div className="max-w-4xl mx-auto py-8 px-4">
-        {/* Article Card */}
-        <article className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8 border border-gray-200">
+    <div className="min-h-screen bg-background">
+      <div className="max-w-4xl mx-auto py-10 px-4 sm:px-6">
+        {/* Article */}
+        <article className="bg-card rounded-2xl shadow-sm overflow-hidden mb-10 border">
+          {/* Hero Image */}
           {article.thumbnail && (
-            <div className="relative h-96 overflow-hidden">
+            <div className="relative aspect-[2/1] overflow-hidden">
               <img
                 src={
                   article.thumbnail.startsWith("http")
@@ -1115,125 +1221,183 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
                     : `${API_URL.replace("/api", "")}/storage/${article.thumbnail}`
                 }
                 alt={article.title}
-                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                className="w-full h-full object-cover"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    "https://images.unsplash.com/photo-1588681664899-f142ff2dc9b1?q=80&w=2070";
+                  (e.target as HTMLImageElement).src = "/placeholder.svg";
                 }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
             </div>
           )}
 
-          <div className="p-8">
-            <div className="mb-6">
-              <span className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 font-semibold text-sm">
-                <Tag className="h-4 w-4 mr-2" />
+          <div className="p-6 sm:p-10">
+            {/* Category Badge */}
+            <div className="mb-4">
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-medium text-sm">
+                <Tag className="h-3.5 w-3.5 mr-1.5" />
                 {article.category?.name || "Uncategorized"}
               </span>
+              {article.is_featured && (
+                <span className="ml-2 inline-flex items-center px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 font-medium text-sm">
+                  ⭐ Featured
+                </span>
+              )}
+              {article.is_breaking && (
+                <span className="ml-2 inline-flex items-center px-3 py-1 rounded-full bg-red-100 text-red-700 font-medium text-sm">
+                  🔴 Breaking
+                </span>
+              )}
             </div>
 
-            <h1 className="text-5xl font-bold mb-6 text-gray-900 leading-tight">
+            {/* Title */}
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6 text-foreground leading-tight">
               {article.title}
             </h1>
 
-            <div className="flex flex-wrap items-center gap-6 mb-8 text-gray-600">
+            {/* Author & Meta */}
+            <div className="flex flex-wrap items-center gap-4 mb-8 pb-6 border-b">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                  {getInitials(article.author?.name || "")}
-                </div>
+                {getAvatarUrl(article.author?.avatar) ? (
+                  <img
+                    src={getAvatarUrl(article.author?.avatar)!}
+                    alt={article.author?.name || ""}
+                    className="w-11 h-11 rounded-full object-cover ring-2 ring-border"
+                  />
+                ) : (
+                  <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-lg ring-2 ring-border">
+                    {getInitials(article.author?.name || "")}
+                  </div>
+                )}
                 <div>
-                  <p className="font-bold text-gray-900">
+                  <p className="font-semibold text-foreground">
                     {article.author?.name || "Anonymous"}
                   </p>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="h-4 w-4" />
-                    <span>{formatDate(article.created_at)}</span>
+                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {formatDate(article.created_at)}
+                    </span>
+                    {article.reading_time_minutes && (
+                      <span>· {article.reading_time_minutes} min read</span>
+                    )}
                   </div>
                 </div>
               </div>
+              <div className="ml-auto flex items-center gap-2">
+                {user && article.author_id !== user.id && (
+                  <FollowButton authorId={article.author_id} />
+                )}
+                {!user && (
+                  <a
+                    href="/login"
+                    className="px-4 py-1.5 rounded-full text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm transition-all duration-200"
+                  >
+                    Follow
+                  </a>
+                )}
+              </div>
             </div>
 
-            <div className="prose prose-lg max-w-none mb-10">
-              <div className="text-gray-700 text-lg leading-relaxed whitespace-pre-wrap bg-gray-50 p-6 rounded-xl">
+            {/* Content */}
+            <div className="prose prose-lg dark:prose-invert max-w-none mb-8">
+              <div className="text-foreground/90 text-[17px] leading-[1.8] whitespace-pre-wrap">
                 {article.content}
               </div>
             </div>
 
-            {/* Article Engagement Buttons */}
-            <div className="flex flex-wrap items-center gap-4 py-6 border-t border-gray-200">
+            {/* Tags */}
+            {article.tags && article.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-6 pb-6 border-b">
+                {article.tags.map((tag: any) => (
+                  <span key={tag.id} className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm font-medium">
+                    #{tag.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Engagement Bar */}
+            <div className="flex flex-wrap items-center gap-3 py-4">
               <button
                 onClick={toggleArticleLike}
-                className={`flex items-center gap-3 px-1 py-1 rounded-full transition-all duration-300 ${
-                  liked
-                    ? "bg-gradient-to-r from-red-50 to-pink-50 text-red-600 border border-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                } ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${liked
+                    ? "bg-red-50 text-red-600 border border-red-200 dark:bg-red-950 dark:border-red-800"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  } ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={!user || isLiking}
               >
                 {isLiking ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+                  <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
                 )}
-                <span className="font-bold">{likes}</span>
-                <span>{liked ? "Liked" : "Like"}</span>
+                <span>{likes}</span>
               </button>
-              <button className="flex items-center gap-3 px-1 py-1 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-                <MessageCircle className="h-5 w-5" />
-                <span className="font-bold">{totalComments(comments)}</span>
-                <span>Comments</span>
+
+              <button className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-muted text-muted-foreground">
+                <MessageCircle className="h-4 w-4" />
+                <span>{totalComments(comments)}</span>
               </button>
+
               <button
                 onClick={toggleBookmark}
-                className={`flex items-center gap-3  py-1 px-1 rounded-full transition ${
-                  bookmarked
-                    ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-600 border border-blue-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                } ${isBookmarking ? "opacity-50 cursor-not-allowed" : ""}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${bookmarked
+                    ? "bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-950 dark:border-blue-800"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  } ${isBookmarking ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={!user || isBookmarking}
               >
                 {isBookmarking ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Bookmark
-                    className={`h-5 w-5 ${bookmarked ? "fill-current" : ""}`}
-                  />
+                  <Bookmark className={`h-4 w-4 ${bookmarked ? "fill-current" : ""}`} />
                 )}
-                <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
+                <span>{bookmarked ? "Saved" : "Save"}</span>
               </button>
-              <SocialShare
-                config={{
-                  url: window.location.href,
-                  title: article.title,
-                  description: article.content.substring(0, 160),
-                }}
-              />
+
+              <div className="ml-auto">
+                <SocialShare
+                  config={{
+                    url: typeof window !== "undefined" ? window.location.href : "",
+                    title: article.title,
+                    description: article.content.substring(0, 160),
+                  }}
+                />
+              </div>
             </div>
           </div>
         </article>
 
-        {/* Comments Section (Facebook-style) */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-2xl font-bold text-gray-900">Comments</h3>
-            <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-full font-semibold text-sm">
+        {/* Comments Section */}
+        <div className="bg-card rounded-2xl shadow-sm p-6 sm:p-8 border">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-foreground">Comments</h3>
+            <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-sm font-medium">
               {totalComments(comments)}
-            </div>
+            </span>
           </div>
 
+          {/* Comment Input */}
           {user ? (
-            <div className="mb-8">
+            <div className="mb-6">
               <div className="flex gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 shadow-md">
-                  {getInitials(user.name)}
-                </div>
-                <div className="flex-1 bg-gray-100 rounded-3xl px-4 py-3">
+                {getAvatarUrl(user.avatar) ? (
+                  <img
+                    src={getAvatarUrl(user.avatar)!}
+                    alt={user.name}
+                    className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-sm">
+                    {getInitials(user.name)}
+                  </div>
+                )}
+                <div className="flex-1 bg-muted rounded-2xl px-4 py-3">
                   <Textarea
                     placeholder="Write a comment..."
                     value={commentText}
                     onChange={(e: any) => setCommentText(e.target.value)}
-                    className="min-h-[60px] bg-transparent border-0 p-0 focus:ring-0 text-sm"
+                    className="min-h-[50px] bg-transparent border-0 p-0 focus:ring-0 text-sm resize-none"
                     onKeyDown={(e: any) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -1314,6 +1478,7 @@ export default function ArticleDetailClient({ article }: { article: Article }) {
                     onEdit={startEdit}
                     onDelete={deleteComment}
                     onLike={toggleCommentLike}
+                    onReact={reactToComment}
                     isDeleting={isDeleting}
                     isPostingReply={isPostingReply}
                     editingComment={editingComment}

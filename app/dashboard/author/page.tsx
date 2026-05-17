@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
-import { Navbar } from "@/components/navbar";
 import {
   Card,
   CardContent,

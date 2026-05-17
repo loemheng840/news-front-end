@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/components/auth-provider";
-import { Navbar } from "@/components/navbar";
 import {
   Card,
   CardContent,
@@ -72,7 +71,11 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Flag,
+  Shield,
+  Megaphone,
 } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { format, subMonths, eachMonthOfInterval } from "date-fns";
 import {
@@ -356,7 +359,7 @@ export default function AdminPage() {
     try {
       await updateCategoryMutation({
         id,
-        name: editingCategoryName.trim(),
+        data: { name: editingCategoryName.trim() },
       }).unwrap();
       setEditingCategoryId(null);
       setEditingCategoryName("");
@@ -433,19 +436,18 @@ export default function AdminPage() {
     engagementRate:
       articles.length > 0
         ? Math.round(
-            (articles.reduce(
-              (acc, a) => acc + (a.likes_count || a.likes?.length || 0),
-              0,
-            ) /
-              articles.length) *
-              100,
-          ) / 100
+          (articles.reduce(
+            (acc, a) => acc + (a.likes_count || a.likes?.length || 0),
+            0,
+          ) /
+            articles.length) *
+          100,
+        ) / 100
         : 0,
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
-      <Navbar />
       <main className="flex-1 container mx-auto px-4 py-8">
         {/* Success/Error Messages */}
         {(error || success) && (

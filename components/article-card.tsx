@@ -31,10 +31,13 @@ export function ArticleCard({
     : format(new Date(article.created_at), "MMM dd, yyyy");
 
   const imageUrl = article.thumbnail
-    ? `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}/storage/${
-        article.thumbnail
-      }`
+    ? `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}/storage/${article.thumbnail
+    }`
     : "/placeholder.svg";
+
+  const authorAvatarUrl = author?.avatar
+    ? `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}/storage/${author.avatar}`
+    : "/placeholder-user.jpg";
 
   const [saved, setSaved] = useState(article.bookmarks || false);
   const [isBookmarking, setIsBookmarking] = useState(false);
@@ -114,7 +117,7 @@ export function ArticleCard({
               <div className="flex items-center gap-3">
                 <div className="relative h-10 w-10 rounded-full bg-muted overflow-hidden ring-2 ring-background shadow-sm">
                   <Image
-                    src={author?.avatar || "/placeholder.svg"}
+                    src={authorAvatarUrl}
                     alt={author?.name || ""}
                     fill
                     className="object-cover"
@@ -207,11 +210,10 @@ export function ArticleCard({
                 toggleBookmark();
               }}
               disabled={isBookmarking}
-              className={`absolute top-4 right-4 p-2 rounded-full backdrop-blur-md transition-all duration-200 ${
-                saved
+              className={`absolute top-4 right-4 p-2 rounded-full backdrop-blur-md transition-all duration-200 ${saved
                   ? "bg-primary text-primary-foreground shadow-lg scale-100"
                   : "bg-black/20 text-white hover:bg-black/40 opacity-0 group-hover:opacity-100"
-              }`}
+                }`}
             >
               <Bookmark
                 className="w-4 h-4"
@@ -248,7 +250,7 @@ export function ArticleCard({
             <div className="flex items-center gap-2">
               <div className="relative h-7 w-7 rounded-full bg-muted overflow-hidden">
                 <Image
-                  src={author?.avatar || "/placeholder.svg"}
+                  src={authorAvatarUrl}
                   alt={author?.name || ""}
                   fill
                   className="object-cover"
@@ -321,7 +323,7 @@ export function ArticleCard({
           <div className="flex items-center gap-2">
             <div className="relative h-8 w-8 rounded-full bg-muted overflow-hidden">
               <Image
-                src={author?.avatar || "/placeholder.svg"}
+                src={authorAvatarUrl}
                 alt={author?.name || ""}
                 fill
                 className="object-cover"

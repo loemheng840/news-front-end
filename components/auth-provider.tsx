@@ -62,8 +62,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (token) {
       try {
         await logoutRequest().unwrap();
-      } catch (error) {
-        console.error("Logout request failed:", error);
+      } catch {
+        // Server-side logout may fail if token is already expired — that's fine
       }
     }
 
