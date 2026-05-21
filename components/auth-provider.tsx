@@ -46,12 +46,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signup = async (name: string, email: string, password: string) => {
     try {
-      await registerRequest({
+      const json = await registerRequest({
         name,
         email,
         password,
         password_confirmation: password,
       }).unwrap();
+
+      // Auto-login if the backend returns a token
+      if (json && "token" in json && json.token && "user" in json && json.user) {
+        const authResponse = json as { token: string; user: User };
+        setUser(authResponse.user);
+        setToken(authResponse.token);
+        localStorage.setItem("token", authResponse.token);
+        localStorage.setItem("user", JSON.stringify(authResponse.user));
+      }
+
       return true;
     } catch {
       return false;
