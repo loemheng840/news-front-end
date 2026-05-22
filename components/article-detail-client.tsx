@@ -83,6 +83,10 @@ interface Article {
   category?: Category;
   author?: User;
   likes?: any[];
+  is_featured?: boolean;
+  is_breaking?: boolean;
+  reading_time_minutes?: number | null;
+  tags?: any[];
 }
 
 type CommentStatus = "PENDING" | "APPROVED" | "REJECTED";
