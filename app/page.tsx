@@ -6,7 +6,6 @@ import { ChevronRight } from "lucide-react";
 import { CardSwapHero } from "@/components/card-swap-hero";
 import { ArticleCard } from "@/components/article-card";
 import { SearchBox } from "@/components/search-box";
-import { InfiniteAutoScroll } from "@/components/auto-scoll";
 import {
   getTrendingArticles,
   getAllTags,
@@ -19,6 +18,7 @@ import {
   useGetCategoriesQuery,
   useGetFeaturedArticlesQuery,
 } from "@/lib/redux/news-api";
+import { TestimonialsColumn } from "@/components/blocks/testimonials-columns-1";
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,14 +61,10 @@ export default function Home() {
         {featuredArticles.length > 0 && (
           <CardSwapHero articles={featuredArticles} />
         )}
-        <div className="mt-10">
-          <InfiniteAutoScroll />
-        </div>
-
         <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-3">
           {/* Main */}
-          <div className="space-y-12 lg:col-span-2">
-            <section className="rounded-xl border bg-card p-5 md:p-6">
+          <div className="space-y-12 lg:col-span-2 rounded-3xl border bg-background/80">
+            <section className="p-5 md:p-6">
               <div className="mb-6 flex items-center justify-between">
                 <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
                   Latest News
@@ -94,58 +90,110 @@ export default function Home() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-8">
-            <section className="rounded-xl border bg-card p-6">
-              <h3 className="mb-4 text-xl font-bold">Trending</h3>
+          <div className="space-y-6">
+            {/* Trending */}
+            <section className="rounded-3xl border bg-background/80 p-6 shadow-sm backdrop-blur">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight">Trending</h3>
+
+                <Link
+                  href="/trending"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  View all
+                </Link>
+              </div>
+
               <div className="space-y-4">
                 {trendingArticles.map((article, index) => (
                   <Link
                     key={article.id}
                     href={`/article/${article.slug}`}
-                    className="flex gap-3 rounded-lg p-2 transition-colors hover:bg-muted/60"
+                    className="group flex items-start gap-4 rounded-2xl border border-transparent p-3 transition-all hover:border-border hover:bg-muted/40"
                   >
-                    <span className="text-2xl font-bold text-primary">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                       {index + 1}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold line-clamp-2">
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h4 className="line-clamp-2 text-sm font-semibold leading-5 transition-colors group-hover:text-primary">
                         {article.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {(typeof article.views === "number"
-                          ? article.views
-                          : article.views?.length || 0)}{" "}
-                        views
-                      </p>
+                      </h4>
+
+                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>
+                          {(typeof article.views === "number"
+                            ? article.views
+                            : article.views?.length || 0)
+                            .toLocaleString()}{" "}
+                          views
+                        </span>
+
+                        <span>•</span>
+
+                        <span>Trending now</span>
+                      </div>
                     </div>
                   </Link>
                 ))}
               </div>
             </section>
 
-            <section className="rounded-xl border bg-card p-6">
-              <h3 className="mb-4 text-xl font-bold">Browse Categories</h3>
-              <div className="space-y-2">
+            {/* Categories */}
+            <section className="rounded-3xl border bg-background/80 p-6 shadow-sm backdrop-blur">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight">
+                  Browse Categories
+                </h3>
+
+                <Link
+                  href="/categories"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Explore
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 {categories.map((category) => (
                   <Link
                     key={category.id}
                     href={`/category/${category.slug}`}
-                    className="block rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
+                    className="group rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted/40"
                   >
-                    {category.name}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{category.name}</span>
+
+                      <span className="text-muted-foreground transition-transform group-hover:translate-x-1">
+                        →
+                      </span>
+                    </div>
                   </Link>
                 ))}
               </div>
             </section>
 
-            <section className="rounded-xl border bg-card p-6">
-              <h3 className="mb-4 text-xl font-bold">Explore Topics</h3>
+            {/* Topics */}
+            <section className="rounded-3xl border bg-background/80 p-6 shadow-sm backdrop-blur">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight">
+                  Explore Topics
+                </h3>
+
+                <Link
+                  href="/topics"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  More topics
+                </Link>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 {popularTags.map((tag) => (
                   <Link
                     key={tag}
                     href={`/tag/${tag}`}
-                    className="rounded-full bg-primary/10 px-3 py-1 text-sm transition-colors hover:bg-primary/20"
+                    className="rounded-full border bg-muted/40 px-4 py-2 text-sm font-medium transition-all hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
                   >
                     #{tag}
                   </Link>
@@ -153,7 +201,39 @@ export default function Home() {
               </div>
             </section>
           </div>
-        </div>
+          </div>
+
+        <section className="mt-12">
+          <h2 className="mb-6 text-2xl font-bold tracking-tight md:text-3xl text-center">
+            What Our Readers Say
+          </h2>
+          <TestimonialsColumn testimonials={[
+            {
+              text: "This news platform is my daily source of truth. Highly recommended!",
+              image: "https://i.pravatar.cc/150?img=1",
+              name: "Alex Johnson",
+              role: "Tech Enthusiast"
+            },
+            {
+              text: "I love the clean design and the speed of updates.",
+              image: "https://i.pravatar.cc/150?img=2",
+              name: "Sarah Williams",
+              role: "Product Manager"
+            },
+            {
+              text: "The best place to get accurate and fast breaking news.",
+              image: "https://i.pravatar.cc/150?img=3",
+              name: "Michael Chen",
+              role: "Journalist"
+            },
+            {
+              text: "An incredibly well-designed UI. It's a joy to read.",
+              image: "https://i.pravatar.cc/150?img=4",
+              name: "Emma Davis",
+              role: "Designer"
+            }
+          ]} />
+        </section>
       </main>
     </>
   );
