@@ -1,16 +1,11 @@
 import type React from "react";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { Footer } from "@/components/footer";
 import { ReduxProvider } from "@/lib/redux/provider";
 import "./globals.css";
-import TextCursor from "@/components/ui/cusor";
-
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Cambo News - Your Trusted Source for the Latest Updates",

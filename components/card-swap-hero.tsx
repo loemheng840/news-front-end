@@ -3,14 +3,9 @@
 import { useState, useEffect } from "react";
 import {
   ArrowRight,
-  TrendingUp,
-  Globe,
-  Zap,
-  Shield,
 } from "lucide-react";
 import Link from "next/link";
 import type { Article } from "@/lib/types";
-import { mockCategories } from "@/lib/mock-data";
 import { SearchBox } from "./search-box";
 import RotatingEarth from "./ui/wireframe-dotted-globe";
 
@@ -20,15 +15,6 @@ interface CardSwapHeroProps {
 
 export function CardSwapHero({ articles }: CardSwapHeroProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-
-  // Static data for news website features (like trading platform features)
-  const newsFeatures = [
-    { icon: Globe, label: "Global Coverage", value: "50+ Countries" },
-    { icon: Zap, label: "Live Updates", value: "24/7 Coverage" },
-    { icon: TrendingUp, label: "Trending Stories", value: "1000+ Daily" },
-    { icon: Shield, label: "Verified Sources", value: "100% Trusted" },
-  ];
-
   // Static trending topics (like stock tickers)
   const trendingTopics = [
     { name: "Technology", change: "+25", color: "text-green-500" },
@@ -90,22 +76,6 @@ export function CardSwapHero({ articles }: CardSwapHeroProps) {
             trusted sources worldwide. Your comprehensive source for global
             events and market insights.
           </p>
-
-          {/* Features Grid (like trading platform features) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-border">
-            {newsFeatures.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <div key={index} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Icon className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-medium">{feature.label}</span>
-                  </div>
-                  <div className="text-xl font-bold">{feature.value}</div>
-                </div>
-              );
-            })}
-          </div>
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 pt-6">
             <Link
